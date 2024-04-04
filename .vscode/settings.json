@@ -30,7 +30,11 @@
         "tusb_cdc_acm.h": "c",
         "lv_conf.h": "c",
         "task.h": "c",
-        "lv_color.h": "c"
+        "lv_color.h": "c",
+        "lcd_types.h": "c",
+        "esp_assert.h": "c",
+        "lv_display_private.h": "c",
+        "lv_obj.h": "c"
     },
     "editor.formatOnSave": true,
     "idf.flashType": "JTAG",

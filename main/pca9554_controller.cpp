@@ -27,7 +27,7 @@ static esp_err_t write_register(uint8_t reg_addr, uint8_t* data, size_t size)
 
 esp_err_t pca9554_init(void)
 {
-    int i2c_master_port = I2C_MASTER_PORT;
+    i2c_port_t i2c_master_port = I2C_MASTER_PORT;
 
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
@@ -35,7 +35,7 @@ esp_err_t pca9554_init(void)
         .scl_io_num = I2C_MASTER_SCL_IO,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+        .master = {.clk_speed = I2C_MASTER_FREQ_HZ},
     };
 
     i2c_param_config(i2c_master_port, &conf);

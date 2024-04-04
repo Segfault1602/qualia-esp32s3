@@ -1,6 +1,6 @@
 #pragma once
 
-#define I2C_MASTER_PORT (0)
+#define I2C_MASTER_PORT ((i2c_port_t)0)
 #define I2C_MASTER_SCL_IO (18)        /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO (8)         /*!< GPIO number used for I2C master data  */
 #define I2C_MASTER_FREQ_HZ (400000)   /*!< I2C master clock frequency */

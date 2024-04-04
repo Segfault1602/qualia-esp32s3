@@ -1,0 +1,310 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d225e52..0c55687 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -41,7 +41,7 @@ add_subdirectory(extern/simde)
+ add_subdirectory(src)
+ 
+ # This hides samples, test, and doxygen from apps that use box2d via FetchContent
+-if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
++if ((CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR) AND (NOT ESP_PLATFORM))
+ 
+ 	option(BOX2D_SAMPLES "Build the Box2D samples" ON)
+ 	option(BOX2D_DOCS "Build the Box2D documentation" OFF)
+@@ -85,7 +85,7 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+ 		if (MSVC)
+ 			set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT samples)
+ 			set_property(TARGET samples PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+-		endif()	
++		endif()
+ 	endif()
+ 
+ 	if (BOX2D_DOCS)
+diff --git a/samples/sample_shapes.cpp b/samples/sample_shapes.cpp
+index 5d0e676..6f87f7a 100644
+--- a/samples/sample_shapes.cpp
++++ b/samples/sample_shapes.cpp
+@@ -226,6 +226,157 @@ public:
+ 
+ static int sampleChainShape = RegisterSample("Shapes", "Chain Shape", ChainShape::Create);
+ 
++class RoundChain : public Sample
++{
++    public:
++	enum ShapeType
++	{
++		e_circleShape = 0,
++		e_capsuleShape,
++		e_boxShape
++	};
++
++	RoundChain(Settings& settings)
++		: Sample(settings)
++	{
++		if (settings.restart == false)
++		{
++			g_camera.m_center = {0.0f, 0.0f};
++			g_camera.m_zoom = 1.75f;
++		}
++
++		m_groundId = b2_nullBodyId;
++		m_bodyId = b2_nullBodyId;
++		m_chainId = b2_nullChainId;
++		m_shapeId = b2_nullShapeId;
++		m_shapeType = e_circleShape;
++		m_restitution = 0.0f;
++		m_friction = 0.2f;
++		CreateScene();
++		Launch();
++	}
++
++	void CreateScene()
++	{
++		if (B2_IS_NON_NULL(m_groundId))
++		{
++			b2DestroyBody(m_groundId);
++		}
++
++        constexpr size_t count = 100;
++
++        b2Vec2 points[count];
++        for (size_t i = 0; i < count; ++i)
++        {
++            float angle = -2.0f * b2_pi * float(i) / float(count);
++            points[i] = {10.0f * std::cos(angle), 10.0f * std::sin(angle)};
++        }
++
++		b2ChainDef chainDef = b2DefaultChainDef();
++		chainDef.points = points;
++		chainDef.count = count;
++		chainDef.isLoop = true;
++		chainDef.friction = 0.2f;
++
++		b2BodyDef bodyDef = b2DefaultBodyDef();
++		m_groundId = b2CreateBody(m_worldId, &bodyDef);
++
++		m_chainId = b2CreateChain(m_groundId, &chainDef);
++	}
++
++	void Launch()
++	{
++		if (B2_IS_NON_NULL(m_bodyId))
++		{
++			b2DestroyBody(m_bodyId);
++		}
++
++		b2BodyDef bodyDef = b2DefaultBodyDef();
++		bodyDef.type = b2_dynamicBody;
++		bodyDef.position = {0.0f, 0.0f};
++		m_bodyId = b2CreateBody(m_worldId, &bodyDef);
++
++		b2ShapeDef shapeDef = b2DefaultShapeDef();
++		shapeDef.density = 1.0f;
++		shapeDef.friction = m_friction;
++		shapeDef.restitution = m_restitution;
++
++		if (m_shapeType == e_circleShape)
++		{
++			b2Circle circle = {{0.0f, 0.0f}, 0.5f};
++			m_shapeId = b2CreateCircleShape(m_bodyId, &shapeDef, &circle);
++		}
++		else if (m_shapeType == e_capsuleShape)
++		{
++			b2Capsule capsule = {{-0.5f, 0.0f}, {0.5f, 0.0}, 0.25f};
++			m_shapeId = b2CreateCapsuleShape(m_bodyId, &shapeDef, &capsule);
++		}
++		else
++		{
++			float h = 0.5f;
++			b2Polygon box = b2MakeBox(h, h);
++			m_shapeId = b2CreatePolygonShape(m_bodyId, &shapeDef, &box);
++		}
++	}
++
++	void UpdateUI() override
++	{
++		ImGui::SetNextWindowPos(ImVec2(10.0f, 200.0f), ImGuiCond_Once);
++		ImGui::SetNextWindowSize(ImVec2(280.0f, 125.0f));
++		ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoResize);
++
++		const char* shapeTypes[] = {"Circle", "Capsule", "Box"};
++		int shapeType = int(m_shapeType);
++		if (ImGui::Combo("Shape", &shapeType, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
++		{
++			m_shapeType = ShapeType(shapeType);
++			Launch();
++		}
++
++		if (ImGui::SliderFloat("Friction", &m_friction, 0.0f, 1.0f, "%.2f"))
++		{
++			b2Shape_SetFriction(m_shapeId, m_friction);
++			b2Chain_SetFriction(m_chainId, m_friction);
++		}
++
++		if (ImGui::SliderFloat("Restitution", &m_restitution, 0.0f, 2.0f, "%.1f"))
++		{
++			b2Shape_SetRestitution(m_shapeId, m_restitution);
++		}
++
++		if (ImGui::Button("Launch"))
++		{
++			Launch();
++		}
++
++		ImGui::End();
++	}
++
++	void Step(Settings& settings) override
++	{
++		Sample::Step(settings);
++
++		g_draw.DrawSegment(b2Vec2_zero, {0.5f, 0.0f}, b2MakeColor(b2_colorRed));
++		g_draw.DrawSegment(b2Vec2_zero, {0.0f, 0.5f}, b2MakeColor(b2_colorGreen));
++	}
++
++	static Sample* Create(Settings& settings)
++	{
++		return new RoundChain(settings);
++	}
++
++	b2BodyId m_groundId;
++	b2BodyId m_bodyId;
++	b2ChainId m_chainId;
++	ShapeType m_shapeType;
++	b2ShapeId m_shapeId;
++	float m_restitution;
++	float m_friction;
++};
++
++static int sampleRoundChain = RegisterSample("Shapes", "Round Chain", RoundChain::Create);
++
++
+ // This sample shows how careful creation of compound shapes leads to better simulation and avoids
+ // objects getting stuck.
+ // This also shows how to get the combined AABB for the body.
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 0c4d167..9f57c29 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -101,11 +101,11 @@ endif()
+ 
+ target_include_directories(box2d
+   PUBLIC
+-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
++	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
++	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
++	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+   PRIVATE
+-    ${CMAKE_CURRENT_SOURCE_DIR}
++	${CMAKE_CURRENT_SOURCE_DIR}
+ )
+ 
+ # SIMDE is used to support SIMD math on multiple platforms
+@@ -114,10 +114,10 @@ target_link_libraries(box2d PRIVATE simde)
+ # Box2D uses C17
+ set_target_properties(box2d PROPERTIES
+ 	C_STANDARD 17
+-    C_STANDARD_REQUIRED YES
+-    C_EXTENSIONS NO
+-    VERSION ${PROJECT_VERSION}
+-    SOVERSION ${PROJECT_VERSION_MAJOR}
++	C_STANDARD_REQUIRED YES
++	C_EXTENSIONS NO
++	VERSION ${PROJECT_VERSION}
++	SOVERSION ${PROJECT_VERSION_MAJOR}
+ )
+ 
+ if (BOX2D_PROFILE)
+@@ -136,7 +136,7 @@ if (BOX2D_PROFILE)
+ endif()
+ 
+ if (MSVC)
+-	message(STATUS "Box2D on MSVC")	
++	message(STATUS "Box2D on MSVC")
+ 	if (BUILD_SHARED_LIBS)
+ 		# this is needed by DLL users to import Box2D symbols
+ 		target_compile_definitions(box2d INTERFACE BOX2D_DLL)
+@@ -154,13 +154,13 @@ if (MSVC)
+ 	endif()
+ 
+ 	if (BOX2D_AVX2)
+-		message(STATUS "Box2D using AVX2")	
++		message(STATUS "Box2D using AVX2")
+ 		target_compile_options(box2d PRIVATE /arch:AVX2)
+ 	endif()
+ elseif (MINGW)
+ 	message(STATUS "Box2D on MinGW")
+ 	if (BOX2D_AVX2)
+-		message(STATUS "Box2D using AVX2")	
++		message(STATUS "Box2D using AVX2")
+ 		target_compile_options(box2d PRIVATE -mavx2)
+ 	else()
+ 		# see SIMDE_DIAGNOSTIC_DISABLE_PSABI_
+@@ -194,6 +194,12 @@ elseif (UNIX)
+ 			target_compile_options(box2d PRIVATE -Wno-psabi)
+ 		endif()
+ 	endif()
++elseif (ESP_PLATFORM)
++	message(STATUS "Box2D on ESP_PLATFORM")
++	target_compile_definitions(box2d PRIVATE ESP_PLATFORM)
++	target_compile_options(box2d PRIVATE -mtext-section-literals)
++else()
++	message(STATUS "Box2D using unknown platform")
+ endif()
+ 
+ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "src" FILES ${BOX2D_SOURCE_FILES})
+diff --git a/src/core.h b/src/core.h
+index 589ff24..2a4fa2f 100644
+--- a/src/core.h
++++ b/src/core.h
+@@ -33,6 +33,8 @@
+ #endif
+ #elif defined(__EMSCRIPTEN__)
+ #define B2_PLATFORM_WASM
++#elif defined(ESP_PLATFORM)
++#define B2_PLATFORM_ESP
+ #else
+ #error Unsupported platform
+ #endif
+@@ -44,6 +46,8 @@
+ #define B2_CPU_ARM
+ #elif defined(__EMSCRIPTEN__)
+ #define B2_CPU_WASM
++#elif defined(__XTENSA__)
++#define B2_CPU_XTENSA
+ #else
+ #error Unsupported CPU
+ #endif
+@@ -65,11 +69,12 @@
+ #elif defined(B2_CPU_ARM)
+ #define B2_BREAKPOINT __builtin_trap()
+ #endif
+-#elif defined(B2_PLATFORM_WASM)
+-#define B2_BREAKPOINT                                                                                                                      \
+-	do                                                                                                                                     \
+-	{                                                                                                                                      \
+-	} while (0)
++#elif defined(B2_PLATFORM_WASM) || defined(B2_PLATFORM_ESP)
++#define B2_BREAKPOINT                                                                                                        \
++do                                                                                                                       \
++{                                                                                                                        \
++}                                                                                                                        \
++while (0)
+ #else
+ #error Unknown platform
+ #endif
+diff --git a/src/world.c b/src/world.c
+index 138aef7..7ef15fb 100644
+--- a/src/world.c
++++ b/src/world.c
+@@ -103,7 +103,7 @@ b2WorldId b2CreateWorld(const b2WorldDef* def)
+ 	b2InitializeContactRegisters();
+ 
+ 	b2World* world = b2_worlds + index;
+-	*world = (b2World){0};
++	// *world = (b2World){0};
+ 
+ 	world->poolIndex = index;
+ 

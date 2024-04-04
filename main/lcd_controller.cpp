@@ -94,39 +94,56 @@ static const st7701_lcd_init_cmd_t TL021WVC02_init_cmds[] = {
 
 esp_err_t lcd_controller_init()
 {
-    esp_lcd_rgb_panel_config_t rgb_config = {
-        .clk_src = LCD_CLK_SRC_PLL160M,
-        .psram_trans_align = 64,
-        .data_width = 16,
-        .sram_trans_align = 8,
-        .num_fbs = 2,
-        .de_gpio_num = LCD_PIN_NUM_DE,
-        .pclk_gpio_num = LCD_PIN_NUM_PCLK,
-        .vsync_gpio_num = LCD_PIN_NUM_VSYNC,
-        .hsync_gpio_num = LCD_PIN_NUM_HSYNC,
-        .disp_gpio_num = -1,
-        .data_gpio_nums = {LCD_PIN_NUM_B0, LCD_PIN_NUM_B1, LCD_PIN_NUM_B2, LCD_PIN_NUM_B3, LCD_PIN_NUM_B4,
-                           LCD_PIN_NUM_G0, LCD_PIN_NUM_G1, LCD_PIN_NUM_G2, LCD_PIN_NUM_G3, LCD_PIN_NUM_G4,
-                           LCD_PIN_NUM_G5, LCD_PIN_NUM_R0, LCD_PIN_NUM_R1, LCD_PIN_NUM_R2, LCD_PIN_NUM_R3,
-                           LCD_PIN_NUM_R4},
-        .timings.pclk_hz = LCD_PIXEL_CLOCK_HZ,
-        .timings.h_res = LCD_H_RES,
-        .timings.v_res = LCD_V_RES,
-        .timings.hsync_pulse_width = 2,
-        .timings.hsync_back_porch = 44,
-        .timings.hsync_front_porch = 50,
-        .timings.vsync_pulse_width = 2,
-        .timings.vsync_back_porch = 18,
-        .timings.vsync_front_porch = 16,
-        .timings.flags.hsync_idle_low = 0,
-        .timings.flags.vsync_idle_low = 0,
-        .timings.flags.de_idle_high = 0,
-        .timings.flags.pclk_active_neg = 0,
-        .timings.flags.pclk_idle_high = 0,
-        .flags.fb_in_psram = 1,
-        .flags.disp_active_low = 0,
-        .flags.refresh_on_demand = 0,
-    };
+    esp_lcd_rgb_panel_config_t rgb_config;
+    memset(&rgb_config, 0, sizeof(esp_lcd_rgb_panel_config_t));
+    rgb_config.clk_src = LCD_CLK_SRC_PLL160M;
+    rgb_config.psram_trans_align = 64;
+    rgb_config.data_width = 16;
+    rgb_config.sram_trans_align = 8;
+    rgb_config.num_fbs = 2;
+    rgb_config.de_gpio_num = LCD_PIN_NUM_DE;
+    rgb_config.pclk_gpio_num = LCD_PIN_NUM_PCLK;
+    rgb_config.vsync_gpio_num = LCD_PIN_NUM_VSYNC;
+    rgb_config.hsync_gpio_num = LCD_PIN_NUM_HSYNC;
+    rgb_config.disp_gpio_num = -1;
+    rgb_config.data_gpio_nums[0] = LCD_PIN_NUM_B0;
+    rgb_config.data_gpio_nums[1] = LCD_PIN_NUM_B1;
+    rgb_config.data_gpio_nums[2] = LCD_PIN_NUM_B2;
+    rgb_config.data_gpio_nums[3] = LCD_PIN_NUM_B3;
+    rgb_config.data_gpio_nums[4] = LCD_PIN_NUM_B4;
+    rgb_config.data_gpio_nums[5] = LCD_PIN_NUM_G0;
+    rgb_config.data_gpio_nums[6] = LCD_PIN_NUM_G1;
+    rgb_config.data_gpio_nums[7] = LCD_PIN_NUM_G2;
+    rgb_config.data_gpio_nums[8] = LCD_PIN_NUM_G3;
+    rgb_config.data_gpio_nums[9] = LCD_PIN_NUM_G4;
+    rgb_config.data_gpio_nums[10] = LCD_PIN_NUM_G5;
+    rgb_config.data_gpio_nums[11] = LCD_PIN_NUM_R0;
+    rgb_config.data_gpio_nums[12] = LCD_PIN_NUM_R1;
+    rgb_config.data_gpio_nums[13] = LCD_PIN_NUM_R2;
+    rgb_config.data_gpio_nums[14] = LCD_PIN_NUM_R3;
+    rgb_config.data_gpio_nums[15] = LCD_PIN_NUM_R4;
+
+    // rgb_config.data_gpio_nums = {LCD_PIN_NUM_B0, LCD_PIN_NUM_B1, LCD_PIN_NUM_B2, LCD_PIN_NUM_B3,
+    //                              LCD_PIN_NUM_B4, LCD_PIN_NUM_G0, LCD_PIN_NUM_G1, LCD_PIN_NUM_G2,
+    //                              LCD_PIN_NUM_G3, LCD_PIN_NUM_G4, LCD_PIN_NUM_G5, LCD_PIN_NUM_R0,
+    //                              LCD_PIN_NUM_R1, LCD_PIN_NUM_R2, LCD_PIN_NUM_R3, LCD_PIN_NUM_R4};
+    rgb_config.timings.pclk_hz = LCD_PIXEL_CLOCK_HZ;
+    rgb_config.timings.h_res = LCD_H_RES;
+    rgb_config.timings.v_res = LCD_V_RES;
+    rgb_config.timings.hsync_pulse_width = 2;
+    rgb_config.timings.hsync_back_porch = 44;
+    rgb_config.timings.hsync_front_porch = 50;
+    rgb_config.timings.vsync_pulse_width = 2;
+    rgb_config.timings.vsync_back_porch = 18;
+    rgb_config.timings.vsync_front_porch = 16;
+    rgb_config.timings.flags.hsync_idle_low = 0;
+    rgb_config.timings.flags.vsync_idle_low = 0;
+    rgb_config.timings.flags.de_idle_high = 0;
+    rgb_config.timings.flags.pclk_active_neg = 0;
+    rgb_config.timings.flags.pclk_idle_high = 0;
+    rgb_config.flags.fb_in_psram = 1;
+    rgb_config.flags.disp_active_low = 0;
+    rgb_config.flags.refresh_on_demand = 0;
 
     spi_line_config_t line_config = {
         .cs_io_type = IO_TYPE_EXPANDER,
