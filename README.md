@@ -106,6 +106,9 @@ On Windows, use `python` and `build/trace-analysis/Scripts/python.exe`.
 
 No board or ESP-IDF needed. Requires C17/C++23 compilers, CMake 3.24+, and Ninja.
 ASan requires GCC or Clang on a non-Windows host; omit that option on Windows.
+Tests compile production physics, sensor, application scene, and view code.
+Minimal SDK/LVGL stand-ins cover initialization failures, resource cleanup,
+injected time, and trace output without hardware.
 
 ```sh
 cmake -S tests -B build/host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DQUALIA_ASAN=ON
@@ -122,3 +125,18 @@ python -m unittest discover -s tests -p test_trace.py
 VS Code defaults to `build/demo`. Configure the ESP-IDF extension for your
 installation; when switching profiles, update the build, compile-command,
 and debug ELF paths together.
+
+## Code ownership
+
+The single `main` component separates SDK-independent algorithms in `core/`,
+hardware access in `drivers/`, passive subsystems in `modules/`, LVGL views in
+`gui/`, and application wiring in `app/`. Hardware drivers are static board
+resources; modules outlive the tasks that step them. External C library APIs
+stay at their integration boundaries.
+
+The UI task owns non-copyable `app::Simulation` and optional `app::ImuOverlay`
+objects. It passes monotonic timestamps and complete newest IMU data into them.
+The simulation's first step anchors its fixed-step clock. Scene initialization
+rolls back partial failures, and scoped views release their LVGL objects and
+draw buffers. Create, update, and destroy views on the UI task while their active
+screen is valid; destroy ball bodies before their physics world.

@@ -10,12 +10,15 @@ typedef struct _lv_draw_buf_t lv_draw_buf_t;
 namespace gui
 {
 /**
- * @brief A shaded green disc on the active screen, positioned by its center in panel pixels.
+ * @brief Owns a shaded green disc positioned by its center in panel pixels.
+ *
+ * Create, move, and destroy on the UI task while the active screen is valid.
  */
 class BallView
 {
   public:
     BallView() = default;
+    ~BallView();
     BallView(const BallView&) = delete;
     BallView& operator=(const BallView&) = delete;
 
@@ -23,7 +26,7 @@ class BallView
      * @param diameter Disc diameter in pixels; at most 50.
      */
     esp_err_t create(int diameter);
-    void move_to(display::Point center);
+    esp_err_t move_to(display::Point center);
     void destroy();
 
   private:

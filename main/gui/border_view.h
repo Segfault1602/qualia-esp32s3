@@ -4,10 +4,27 @@
 
 #include "display_helpers.h"
 
+typedef struct _lv_obj_t lv_obj_t;
+
 namespace gui
 {
 /**
- * @brief Draws a blue ring on the active screen whose inner edge is a circle of inner_radius pixels around center.
+ * @brief Owns a blue ring whose inner edge is a circle in panel pixels.
+ *
+ * Create and destroy on the UI task while the active screen is valid.
  */
-esp_err_t create_border_ring(display::Point center, int inner_radius);
+class BorderView
+{
+  public:
+    BorderView() = default;
+    ~BorderView();
+    BorderView(const BorderView&) = delete;
+    BorderView& operator=(const BorderView&) = delete;
+
+    esp_err_t create(display::Point center, int inner_radius);
+    void destroy();
+
+  private:
+    lv_obj_t* ring_ = nullptr;
+};
 } // namespace gui

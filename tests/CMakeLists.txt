@@ -14,7 +14,7 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/Box2D.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/StMems.cmake")
 
-foreach(test_name IN ITEMS display_tests fixed_step_tests)
+foreach(test_name IN ITEMS display_tests fixed_step_tests lcd_data_tests)
     add_executable(${test_name} ${test_name}.cpp)
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../main/core"
         "${CMAKE_CURRENT_LIST_DIR}/../main/drivers")
@@ -80,6 +80,7 @@ endif()
 
 add_test(NAME display_helpers COMMAND display_tests)
 add_test(NAME fixed_step_clock COMMAND fixed_step_tests)
+add_test(NAME lcd_data COMMAND lcd_data_tests)
 add_test(NAME physics_scene COMMAND physics_tests)
 add_test(NAME imu_drivers COMMAND imu_driver_tests)
 add_test(NAME imu_core COMMAND imu_core_tests)
@@ -98,3 +99,45 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(midi_mapping_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 add_test(NAME midi_mapping COMMAND midi_mapping_tests)
+
+add_executable(gui_view_tests gui_view_tests.cpp ../main/gui/ball_view.cpp
+    ../main/gui/border_view.cpp ../main/gui/imu_readout.cpp)
+target_include_directories(gui_view_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"
+    "${CMAKE_CURRENT_LIST_DIR}/../main" "${CMAKE_CURRENT_LIST_DIR}/../main/core")
+set_target_properties(gui_view_tests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(gui_view_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME gui_views COMMAND gui_view_tests)
+
+foreach(test_name IN ITEMS app_scene_tests app_scene_trace_tests)
+    add_executable(${test_name} app_scene_tests.cpp ../main/app/ball.cpp ../main/app/simulation.cpp
+        ../main/app/physics_world.cpp ../main/app/imu_overlay.cpp
+        ../main/gui/ball_view.cpp ../main/gui/border_view.cpp ../main/gui/imu_readout.cpp)
+    target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"
+        "${CMAKE_CURRENT_LIST_DIR}/../main" "${CMAKE_CURRENT_LIST_DIR}/../main/core"
+        "${CMAKE_CURRENT_LIST_DIR}/../main/app" "${CMAKE_CURRENT_LIST_DIR}/../main/drivers")
+    target_link_libraries(${test_name} PRIVATE box2d Threads::Threads)
+    set_target_properties(${test_name} PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+endforeach()
+target_compile_definitions(app_scene_trace_tests PRIVATE CONFIG_QUALIA_MODE_TRACE=1)
+add_test(NAME app_scene COMMAND app_scene_tests)
+add_test(NAME app_scene_trace COMMAND app_scene_trace_tests)
+
+add_executable(pca9554_tests pca9554_tests.cpp ../main/drivers/pca9554_controller.cpp)
+target_include_directories(pca9554_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"
+    "${CMAKE_CURRENT_LIST_DIR}/../main/drivers" "${CMAKE_CURRENT_LIST_DIR}/../main/core")
+set_target_properties(pca9554_tests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(pca9554_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME pca9554_init COMMAND pca9554_tests 0)
+foreach(failure RANGE 1 7)
+    add_test(NAME pca9554_rollback_${failure} COMMAND pca9554_tests ${failure})
+endforeach()

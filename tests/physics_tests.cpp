@@ -18,6 +18,8 @@
 
 int main()
 {
+    const b2ContactEvents empty_events{};
+    CHECK(!physics::strongest_bounce(empty_events, b2_nullBodyId, b2_nullBodyId));
     const b2WorldId world = physics::create_world();
     CHECK(b2World_IsValid(world));
     const b2BodyId border = physics::create_border(world);
@@ -62,6 +64,10 @@ int main()
                 const auto strongest = physics::strongest_bounce(synthetic, ball, border);
                 CHECK(strongest && strongest->approach_speed == duplicate[1].approachSpeed);
                 CHECK(!physics::strongest_bounce(synthetic, ball, ball));
+                duplicate[1].approachSpeed = duplicate[0].approachSpeed;
+                duplicate[1].point.x += 0.01f;
+                const auto tied = physics::strongest_bounce(synthetic, ball, border);
+                CHECK(tied && tied->point.x == duplicate[0].point.x);
                 checked_events = true;
             }
         }

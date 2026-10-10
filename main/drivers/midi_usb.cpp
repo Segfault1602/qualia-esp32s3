@@ -1,6 +1,6 @@
 #include "midi_usb.h"
 
-#include <iterator>
+#include <array>
 
 #include <esp32s3/rom/usb/chip_usb_dw_wrapper.h>
 #include <esp_check.h>
@@ -20,47 +20,24 @@ namespace
 {
 constexpr const char* TAG = "MIDI";
 
-// Interface counter
-enum interface_count
-{
-#if CFG_TUD_MIDI
-    ITF_NUM_MIDI = 0,
-    ITF_NUM_MIDI_STREAMING,
-#endif
-    ITF_COUNT
-};
-
-// USB Endpoint numbers
-enum usb_endpoints
-{
-    // Available USB Endpoints: 5 IN/OUT EPs and 1 IN EP
-    EP_EMPTY = 0,
-#if CFG_TUD_MIDI
-    EPNUM_MIDI,
-#endif
-};
-
-/** TinyUSB descriptors **/
-
+constexpr std::uint8_t MIDI_INTERFACE = 0;
+constexpr std::uint8_t INTERFACE_COUNT = CFG_TUD_MIDI ? 2 : 0;
+constexpr std::uint8_t MIDI_ENDPOINT = 1;
 constexpr int TUSB_DESCRIPTOR_TOTAL_LEN = TUD_CONFIG_DESC_LEN + CFG_TUD_MIDI * TUD_MIDI_DESC_LEN;
 
-const char* s_str_desc[] = {
-    // array of pointer to string descriptors
-    "\x09\x04",            // 0: is supported language is English (0x0409)
-    "TinyUSB",             // 1: Manufacturer
-    "TinyUSB Device",      // 2: Product
-    "123456",              // 3: Serials, should use chip ID
-    "Example MIDI device", // 4: MIDI
+std::array<const char*, 5> STRING_DESCRIPTORS{
+    "\x09\x04", "TinyUSB", "TinyUSB Device", "123456", "Example MIDI device",
 };
 
-const uint8_t s_midi_cfg_desc[] = {
+constexpr auto MIDI_CONFIG_DESCRIPTOR = std::to_array<std::uint8_t>({
     // Configuration number, interface count, string index, total length, attribute, power in mA
-    TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, TUSB_DESCRIPTOR_TOTAL_LEN, 0, 100),
+    TUD_CONFIG_DESCRIPTOR(1, INTERFACE_COUNT, 0, TUSB_DESCRIPTOR_TOTAL_LEN, 0, 100),
 #if CFG_TUD_MIDI
     // Interface number, string index, EP Out & EP In address, EP size
-    TUD_MIDI_DESCRIPTOR(ITF_NUM_MIDI, 4, EPNUM_MIDI, (0x80 | EPNUM_MIDI), 64),
+    TUD_MIDI_DESCRIPTOR(MIDI_INTERFACE, 4, MIDI_ENDPOINT, (0x80 | MIDI_ENDPOINT), 64),
 #endif
-};
+});
+static_assert(MIDI_CONFIG_DESCRIPTOR.size() == TUSB_DESCRIPTOR_TOTAL_LEN);
 
 bool g_initialized = false;
 } // namespace
@@ -73,9 +50,9 @@ esp_err_t MidiUsb::init()
 
     // Strict ISO C++ keeps the comma in the macro's `, ##__VA_ARGS__`, so the no-argument form doesn't expand.
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG(nullptr);
-    tusb_cfg.descriptor.string = s_str_desc;
-    tusb_cfg.descriptor.string_count = std::size(s_str_desc);
-    tusb_cfg.descriptor.full_speed_config = s_midi_cfg_desc;
+    tusb_cfg.descriptor.string = STRING_DESCRIPTORS.data();
+    tusb_cfg.descriptor.string_count = STRING_DESCRIPTORS.size();
+    tusb_cfg.descriptor.full_speed_config = MIDI_CONFIG_DESCRIPTOR.data();
     ESP_RETURN_ON_ERROR(tinyusb_driver_install(&tusb_cfg), TAG, "TinyUSB initialization failed");
 
     g_initialized = true;

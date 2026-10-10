@@ -6,11 +6,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <limits>
+#include <numbers>
 
-#define CHECK(condition) do { if (!(condition)) { \
-    std::fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition); \
-    std::exit(EXIT_FAILURE); \
-} } while (false)
+#define CHECK(condition)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            std::fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition);                                       \
+            std::exit(EXIT_FAILURE);                                                                                   \
+        }                                                                                                              \
+    } while (false)
 
 namespace
 {
@@ -224,6 +231,25 @@ void lsm6dsox_tests()
         CHECK(near(sample->accel.y, 0.0f));
         CHECK(near(sample->accel.z, 9.8064f));
     }
+    {
+        FakeDevice device = lsm::make_device();
+        constexpr auto low = std::numeric_limits<std::int16_t>::min();
+        constexpr auto high = std::numeric_limits<std::int16_t>::max();
+        device.put16(lsm::OUTX_L_G, low);
+        device.put16(lsm::OUTX_L_G + 2, high);
+        device.put16(lsm::OUTX_L_A, low);
+        device.put16(lsm::OUTX_L_A + 2, high);
+        imu::Lsm6dsoxDevice sensor(device);
+        const auto sample = sensor.read();
+        CHECK(sample.has_value());
+        constexpr float gyro_scale = 17.5f * std::numbers::pi_v<float> / 180'000.0f;
+        constexpr float accel_scale = 0.061f * 9.80665f / 1000.0f;
+        CHECK(near(sample->gyro.x, low * gyro_scale));
+        CHECK(near(sample->gyro.y, high * gyro_scale));
+        CHECK(near(sample->accel.x, low * accel_scale));
+        CHECK(near(sample->accel.y, high * accel_scale));
+        CHECK(near(sample->gyro.z, 0.0f) && near(sample->accel.z, 0.0f));
+    }
 }
 
 void lis3mdl_tests()
@@ -268,6 +294,19 @@ void lis3mdl_tests()
         CHECK(field.has_value());
         CHECK(near(field->x, 100.0f));
         CHECK(near(field->y, -50.0f));
+        CHECK(near(field->z, 0.0f));
+    }
+    {
+        FakeDevice device = lis::make_device();
+        constexpr auto low = std::numeric_limits<std::int16_t>::min();
+        constexpr auto high = std::numeric_limits<std::int16_t>::max();
+        device.put16(lis::OUT_X_L, low);
+        device.put16(lis::OUT_X_L + 2, high);
+        imu::Lis3mdlDevice sensor(device);
+        const auto field = sensor.read();
+        CHECK(field.has_value());
+        CHECK(near(field->x, low * 100.0f / 6842.0f));
+        CHECK(near(field->y, high * 100.0f / 6842.0f));
         CHECK(near(field->z, 0.0f));
     }
 }

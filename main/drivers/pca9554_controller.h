@@ -21,7 +21,7 @@ namespace drivers
  * set_level() and set_direction() update a cached register and then write it, so they are not safe to call from
  * two tasks at once, and they use the component's fixed 1000 ms transfer timeout. After startup, only one task may
  * change outputs (the backlight). get_level() reads the input register through the driver's own device, with the
- * board's I2C_MASTER_TIMEOUT_MS, and is safe from any task.
+ * board's 20 ms register-transfer timeout, and is safe from any task.
  */
 class Pca9554
 {

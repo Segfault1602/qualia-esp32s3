@@ -1,39 +1,42 @@
 #include "imu_overlay.h"
 
-#include <cstdint>
+#include <esp_check.h>
 
-#include <esp_timer.h>
-
-#include "gui/imu_readout.h"
-
-namespace
+namespace app
 {
-constexpr std::uint64_t REFRESH_PERIOD_US = 250'000;
-
-gui::ImuReadout g_readout;
-std::uint64_t g_last_refresh_us = 0;
-const app::BoardImu* g_imu = nullptr;
-} // namespace
-
-esp_err_t imu_overlay_create(const app::BoardImu& imu)
+esp_err_t ImuOverlay::init()
 {
-    g_imu = &imu;
-    return g_readout.create();
+    ESP_RETURN_ON_FALSE(!initialized_, ESP_ERR_INVALID_STATE, "imu_overlay", "IMU overlay is already initialized");
+    ESP_RETURN_ON_ERROR(readout_.create(), "imu_overlay", "Failed to create IMU readout");
+    initialized_ = true;
+    return ESP_OK;
 }
 
-void imu_overlay_update()
+bool ImuOverlay::is_initialized() const
 {
-    const std::uint64_t now = esp_timer_get_time();
-    if (g_imu == nullptr || now - g_last_refresh_us < REFRESH_PERIOD_US)
-    {
-        return;
-    }
-    g_last_refresh_us = now;
-
-    const auto state = g_imu->latest();
-    if (!state)
-    {
-        return;
-    }
-    g_readout.show(state->up, state->motion.gyro, state->magnetic.value_or(imu::Vec3{}));
+    return initialized_;
 }
+
+esp_err_t ImuOverlay::step(std::chrono::microseconds now, const std::optional<modules::ImuState>& snapshot)
+{
+    ESP_RETURN_ON_FALSE(initialized_, ESP_ERR_INVALID_STATE, "imu_overlay", "IMU overlay is not initialized");
+    ESP_RETURN_ON_FALSE(now >= last_refresh_, ESP_ERR_INVALID_ARG, "imu_overlay", "IMU time must be monotonic");
+    if (now - last_refresh_ < REFRESH_PERIOD)
+    {
+        return ESP_OK;
+    }
+    last_refresh_ = now;
+    if (!snapshot)
+    {
+        return ESP_OK;
+    }
+    return readout_.show(snapshot->up, snapshot->motion.gyro, snapshot->magnetic.value_or(imu::Vec3{}));
+}
+
+void ImuOverlay::destroy()
+{
+    readout_.destroy();
+    last_refresh_ = std::chrono::microseconds::zero();
+    initialized_ = false;
+}
+} // namespace app

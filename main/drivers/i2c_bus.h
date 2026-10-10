@@ -19,7 +19,7 @@ namespace drivers
  *   expander's output register) needs a single owner, or a lock covering the whole operation.
  * - Startup runs before any task, so init() sequences of every driver are serialized.
  *
- * Transfers through open() devices time out after I2C_MASTER_TIMEOUT_MS.
+ * Transfers through open() devices time out after drivers::i2c::TIMEOUT (20 ms).
  */
 class I2cBus
 {

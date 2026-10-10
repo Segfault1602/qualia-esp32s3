@@ -1,7 +1,5 @@
 #include "gui/ball_view.h"
 
-#include <cassert>
-
 #include <esp_check.h>
 #include <esp_log.h>
 #include <lvgl.h>
@@ -15,6 +13,11 @@ constexpr int DRAW_BUF_HEIGHT = 50;
 
 namespace gui
 {
+BallView::~BallView()
+{
+    destroy();
+}
+
 esp_err_t BallView::create(int diameter)
 {
     ESP_RETURN_ON_FALSE(canvas_ == nullptr, ESP_ERR_INVALID_STATE, TAG, "Ball view already created");
@@ -53,11 +56,12 @@ esp_err_t BallView::create(int diameter)
     return ESP_OK;
 }
 
-void BallView::move_to(display::Point center)
+esp_err_t BallView::move_to(display::Point center)
 {
-    assert(canvas_ != nullptr);
+    ESP_RETURN_ON_FALSE(canvas_ != nullptr, ESP_ERR_INVALID_STATE, TAG, "Ball view is not created");
     const auto origin = display::centered_position(center, DRAW_BUF_WIDTH, DRAW_BUF_HEIGHT);
     lv_obj_set_pos(canvas_, origin.x, origin.y);
+    return ESP_OK;
 }
 
 void BallView::destroy()

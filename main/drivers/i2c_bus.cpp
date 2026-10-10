@@ -2,8 +2,8 @@
 
 #include <esp_check.h>
 
-#include "defines.h"
 #include "esp_i2c_register_bus.h"
+#include "i2c_config.h"
 
 namespace
 {
@@ -19,9 +19,9 @@ esp_err_t I2cBus::init()
     ESP_RETURN_ON_FALSE(g_bus == nullptr, ESP_ERR_INVALID_STATE, TAG, "I2C bus is already initialized");
 
     i2c_master_bus_config_t config{};
-    config.i2c_port = I2C_MASTER_PORT;
-    config.sda_io_num = I2C_MASTER_SDA_IO;
-    config.scl_io_num = I2C_MASTER_SCL_IO;
+    config.i2c_port = i2c::PORT;
+    config.sda_io_num = i2c::SDA;
+    config.scl_io_num = i2c::SCL;
     config.clk_source = I2C_CLK_SRC_DEFAULT;
     config.glitch_ignore_cnt = 7;
     config.flags.enable_internal_pullup = true;

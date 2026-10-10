@@ -1,5 +1,7 @@
 #include "lis3mdl_device.h"
 
+#include <array>
+
 #include <lis3mdl_reg.h>
 
 namespace imu
@@ -86,8 +88,8 @@ std::expected<Vec3, Error> Lis3mdlDevice::read()
 {
     const stmdev_ctx_t context = make_context(bus_);
 
-    std::int16_t raw[3] = {};
-    if (lis3mdl_magnetic_raw_get(&context, raw) != 0)
+    std::array<std::int16_t, 3> raw{};
+    if (lis3mdl_magnetic_raw_get(&context, raw.data()) != 0)
     {
         return std::unexpected(Error::Bus);
     }

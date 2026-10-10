@@ -2,6 +2,7 @@
 
 #include <array>
 #include <numbers>
+#include <span>
 
 #include <lsm6dsox_reg.h>
 
@@ -31,10 +32,9 @@ stmdev_ctx_t make_context(RegisterBus& bus)
     return context;
 }
 
-std::int16_t little_endian(const std::uint8_t* bytes)
+std::int16_t little_endian(std::span<const std::uint8_t, 2> bytes)
 {
-    return static_cast<std::int16_t>(static_cast<std::uint16_t>(bytes[0]) |
-                                     static_cast<std::uint16_t>(bytes[1]) << 8);
+    return static_cast<std::int16_t>(static_cast<std::uint16_t>(bytes[0]) | static_cast<std::uint16_t>(bytes[1]) << 8);
 }
 
 float mg_to_mps2(float mg)
@@ -116,12 +116,13 @@ std::expected<MotionSample, Error> Lsm6dsoxDevice::read()
     }
 
     MotionSample sample;
-    sample.gyro.x = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(&raw[0])));
-    sample.gyro.y = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(&raw[2])));
-    sample.gyro.z = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(&raw[4])));
-    sample.accel.x = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(&raw[6])));
-    sample.accel.y = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(&raw[8])));
-    sample.accel.z = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(&raw[10])));
+    const std::span bytes{raw};
+    sample.gyro.x = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(bytes.subspan<0, 2>())));
+    sample.gyro.y = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(bytes.subspan<2, 2>())));
+    sample.gyro.z = mdps_to_radps(lsm6dsox_from_fs500_to_mdps(little_endian(bytes.subspan<4, 2>())));
+    sample.accel.x = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(bytes.subspan<6, 2>())));
+    sample.accel.y = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(bytes.subspan<8, 2>())));
+    sample.accel.z = mg_to_mps2(lsm6dsox_from_fs2_to_mg(little_endian(bytes.subspan<10, 2>())));
     return sample;
 }
 } // namespace imu

@@ -13,6 +13,10 @@
 #include "lcd_controller.h"
 #include "simulation.h"
 
+#if CONFIG_QUALIA_IMU_DEBUG
+#include "imu_overlay.h"
+#endif
+
 #if CONFIG_QUALIA_MODE_MIDI
 #include "bounce_midi.h"
 #include "midi_handoff.h"
@@ -46,7 +50,7 @@ static_assert(pdMS_TO_TICKS(SENSORS_PERIOD.count()) > 0, "The sensors tick is sh
 app::BoardImu* g_sensors_imu = nullptr;
 app::BoardInputs* g_sensors_inputs = nullptr;
 const app::BoardImu* g_ui_imu = nullptr;
-BounceCallback g_on_bounce = nullptr;
+app::BounceCallback g_on_bounce = nullptr;
 #if CONFIG_QUALIA_MODE_MIDI
 modules::Midi* g_midi = nullptr;
 app::MidiHandoff g_midi_handoff;
@@ -94,12 +98,29 @@ void ui_task(void*)
     ESP_LOGI(TAG, "UI task started");
 
     ESP_ERROR_CHECK(gui::init());
-    ESP_ERROR_CHECK(init_simulation(*g_ui_imu, g_on_bounce));
+    app::Simulation simulation;
+    ESP_ERROR_CHECK(simulation.init(g_on_bounce));
+#if CONFIG_QUALIA_IMU_DEBUG
+    app::ImuOverlay overlay;
+    const esp_err_t overlay_error = overlay.init();
+    if (overlay_error != ESP_OK)
+    {
+        simulation.destroy();
+        ESP_ERROR_CHECK(overlay_error);
+    }
+#endif
+    ESP_ERROR_CHECK(simulation.step(now()));
 
     for (;;)
     {
         gui::run_timers();
-        update_simulation();
+        const auto frame_time = now();
+        const auto snapshot = g_ui_imu->latest();
+        const auto up = snapshot ? std::optional{snapshot->up} : std::nullopt;
+        ESP_ERROR_CHECK(simulation.step(frame_time, up));
+#if CONFIG_QUALIA_IMU_DEBUG
+        ESP_ERROR_CHECK(overlay.step(frame_time, snapshot));
+#endif
         vTaskDelay(1);
     }
 }

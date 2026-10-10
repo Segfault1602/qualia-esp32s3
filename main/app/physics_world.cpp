@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <span>
 
 namespace physics
 {
@@ -101,9 +102,9 @@ void step(b2WorldId world)
 std::optional<Bounce> strongest_bounce(const b2ContactEvents& events, b2BodyId ball, b2BodyId border)
 {
     std::optional<Bounce> bounce;
-    for (int i = 0; i < events.hitCount; ++i)
+    const std::span hits{events.hitEvents, static_cast<std::size_t>(events.hitCount)};
+    for (const auto& hit : hits)
     {
-        const auto& hit = events.hitEvents[i];
         const b2BodyId a = b2Shape_GetBody(hit.shapeIdA);
         const b2BodyId b = b2Shape_GetBody(hit.shapeIdB);
         const bool matches =

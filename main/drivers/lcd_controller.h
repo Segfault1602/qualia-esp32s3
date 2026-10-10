@@ -8,8 +8,7 @@
 
 #include "esp_lcd_panel_ops.h"
 
-#define LCD_H_RES 480
-#define LCD_V_RES 480
+#include "lcd_config.h"
 
 namespace drivers
 {
