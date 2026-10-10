@@ -4,7 +4,7 @@ set(srcs app/main.cpp app/tasks.cpp app/simulation.cpp app/ball.cpp app/physics_
          drivers/esp_i2c_register_bus.cpp drivers/lsm6dsox.cpp drivers/lsm6dsox_device.cpp
          drivers/lis3mdl.cpp drivers/lis3mdl_device.cpp)
 if(CONFIG_QUALIA_MODE_MIDI)
-    list(APPEND srcs drivers/midi_usb.cpp modules/midi.cpp)
+    list(APPEND srcs drivers/midi_usb.cpp)
 endif()
 if(CONFIG_QUALIA_IMU_DEBUG)
     list(APPEND srcs app/imu_overlay.cpp gui/imu_readout.cpp)
@@ -15,7 +15,7 @@ idf_component_register(
     INCLUDE_DIRS "." "drivers" "core" "app"
     PRIV_REQUIRES box2d st_mems esp_driver_gpio esp_driver_i2c esp_lcd esp_mm esp_timer esp_trace
                   espressif__esp_io_expander_tca9554 espressif__esp_lcd_st7701
-                  espressif__esp_lcd_panel_io_additions espressif__esp_tinyusb lvgl__lvgl)
+                  espressif__esp_lcd_panel_io_additions espressif__esp_tinyusb lvgl__lvgl efuse)
 
 set_target_properties(${COMPONENT_LIB} PROPERTIES
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)

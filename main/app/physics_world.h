@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include <box2d/box2d.h>
 
@@ -20,6 +21,15 @@ constexpr float BALL_RADIUS = 20.5f / 480.0f;
 b2WorldId create_world();
 // Closed circular wall that keeps the ball inside the round display.
 b2BodyId create_border(b2WorldId world);
-b2BodyId create_ball(b2WorldId world, b2Vec2 position);
+b2BodyId create_ball(b2WorldId world, b2Vec2 position, bool report_hits = false);
 void step(b2WorldId world);
-}
+
+struct Bounce
+{
+    b2Vec2 point;
+    float approach_speed;
+};
+
+// Read immediately after each step, before another step invalidates the contact events.
+std::optional<Bounce> strongest_bounce(const b2ContactEvents& events, b2BodyId ball, b2BodyId border);
+} // namespace physics

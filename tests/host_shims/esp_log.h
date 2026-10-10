@@ -1,6 +1,11 @@
 #pragma once
 // Minimal host stand-in for ESP-IDF's esp_log.h: logging is discarded in native tests.
 
-#define ESP_LOGE(tag, ...) static_cast<void>(tag)
-#define ESP_LOGW(tag, ...) static_cast<void>(tag)
-#define ESP_LOGI(tag, ...) static_cast<void>(tag)
+template <typename... Args>
+inline void host_log(const char*, const char*, const Args&...)
+{
+}
+
+#define ESP_LOGE(tag, ...) host_log(tag, __VA_ARGS__)
+#define ESP_LOGW(tag, ...) host_log(tag, __VA_ARGS__)
+#define ESP_LOGI(tag, ...) host_log(tag, __VA_ARGS__)

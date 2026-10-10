@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <expected>
 #include <optional>
 
 #include <esp_err.h>
@@ -33,5 +34,17 @@ class MidiUsb
      * @brief Next received packet, or nullopt when none is waiting (or before init()). Does not block.
      */
     static std::optional<Packet> read_packet();
+
+    static bool connected();
+
+    /**
+     * @brief Submit a packet without waiting. INVALID_STATE means offline; TIMEOUT means a full TX buffer.
+     */
+    static std::expected<void, esp_err_t> write_packet(const Packet& packet);
+
+    /**
+     * @brief Disconnect USB and reset into the ESP32-S3 ROM downloader. Returns only on failure.
+     */
+    static esp_err_t enter_bootloader();
 };
 } // namespace drivers

@@ -38,5 +38,7 @@
         "lv_obj.h": "c"
     },
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "ms-vscode.cpptools"
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "idf.currentSetup": "/home/alex/.espressif/v6.1/esp-idf",
+    "idf.port": "/dev/ttyACM1"
 }

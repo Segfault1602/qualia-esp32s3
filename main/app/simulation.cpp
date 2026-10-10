@@ -29,6 +29,8 @@ namespace
 {
 
 b2WorldId g_world = b2_nullWorldId;
+b2BodyId g_border = b2_nullBodyId;
+BounceCallback g_on_bounce = nullptr;
 
 ball_t g_ball;
 
@@ -47,8 +49,8 @@ void trace_step(uint64_t start, uint64_t duration)
         return;
     }
     char record[96];
-    const int length = snprintf(record, sizeof(record), "[%" PRIu64 "] - update_simulation: delta=%" PRIu64 "\n",
-                                start, duration);
+    const int length =
+        snprintf(record, sizeof(record), "[%" PRIu64 "] - update_simulation: delta=%" PRIu64 "\n", start, duration);
     assert(length > 0 && static_cast<size_t>(length) < sizeof(record));
     const esp_err_t err = esp_apptrace_write(record, length, 0);
     if (err != ESP_OK && !trace_error_reported)
@@ -68,24 +70,29 @@ esp_err_t create_border()
     ESP_RETURN_ON_FALSE(b2Body_IsValid(border), ESP_ERR_NO_MEM, "simulation", "Failed to create border body");
 
     const int inner_radius = static_cast<int>(std::lround(physics::BORDER_RADIUS * LCD_H_RES));
-    const auto center = display::world_to_panel(physics::BORDER_CENTER.x, physics::BORDER_CENTER.y, LCD_H_RES,
-                                                LCD_V_RES);
+    const auto center =
+        display::world_to_panel(physics::BORDER_CENTER.x, physics::BORDER_CENTER.y, LCD_H_RES, LCD_V_RES);
     const esp_err_t err = gui::create_border_ring(center, inner_radius);
     if (err != ESP_OK)
     {
         b2DestroyBody(border);
+    }
+    else
+    {
+        g_border = border;
     }
     return err;
 }
 
 esp_err_t create_ball()
 {
-    return ball_create(&g_ball, 0.3, 0.8, g_world);
+    return ball_create(&g_ball, 0.3, 0.8, g_world, g_on_bounce != nullptr);
 }
 
-esp_err_t init_simulation(const app::BoardImu& imu)
+esp_err_t init_simulation(const app::BoardImu& imu, BounceCallback on_bounce)
 {
     g_imu = &imu;
+    g_on_bounce = on_bounce;
     g_world = physics::create_world();
     ESP_RETURN_ON_FALSE(b2World_IsValid(g_world), ESP_ERR_NO_MEM, "simulation", "Failed to create physics world");
     ESP_RETURN_ON_ERROR(create_border(), "simulation", "Failed to initialize border");
@@ -107,8 +114,8 @@ void update_simulation()
         const auto imu_state = g_imu->latest();
         if (imu_state)
         {
-            b2World_SetGravity(g_world, tilt::gravity_from_accel(imu_state->up, tilt::BOARD_AXIS_MAP,
-                                                                 physics::GRAVITY_MAGNITUDE));
+            b2World_SetGravity(
+                g_world, tilt::gravity_from_accel(imu_state->up, tilt::BOARD_AXIS_MAP, physics::GRAVITY_MAGNITUDE));
         }
     }
     for (uint32_t i = 0; i < steps; ++i)
@@ -117,6 +124,14 @@ void update_simulation()
         const uint64_t step_start = esp_timer_get_time();
 #endif
         physics::step(g_world);
+        if (g_on_bounce != nullptr)
+        {
+            const auto bounce = physics::strongest_bounce(b2World_GetContactEvents(g_world), g_ball.body, g_border);
+            if (bounce)
+            {
+                g_on_bounce(*bounce);
+            }
+        }
 #if CONFIG_QUALIA_MODE_TRACE
         trace_step(step_start, esp_timer_get_time() - step_start);
 #endif

@@ -4,6 +4,7 @@
 #include <sdkconfig.h>
 
 #include "board.h"
+#include "simulation.h"
 
 #if CONFIG_QUALIA_MODE_MIDI
 #include "modules/midi.h"
@@ -24,7 +25,7 @@ esp_err_t start_sensors_task(app::BoardImu& imu, app::BoardInputs& inputs);
  *
  * Requires drivers::Lcd. imu must outlive the task.
  */
-esp_err_t start_ui_task(const app::BoardImu& imu);
+esp_err_t start_ui_task(const app::BoardImu& imu, BounceCallback on_bounce = nullptr);
 
 #if CONFIG_QUALIA_MODE_MIDI
 /**
@@ -32,5 +33,6 @@ esp_err_t start_ui_task(const app::BoardImu& imu);
  * task.
  */
 esp_err_t start_midi_task(modules::Midi& midi);
+void publish_bounce_midi(const physics::Bounce& bounce);
 #endif
 } // namespace app

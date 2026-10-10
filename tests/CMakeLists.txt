@@ -55,10 +55,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Module tests build modules/ headers against minimal ESP-IDF stand-ins in host_shims/.
-foreach(test_name IN ITEMS imu_module_tests inputs_module_tests)
+foreach(test_name IN ITEMS imu_module_tests inputs_module_tests midi_module_tests)
     add_executable(${test_name} ${test_name}.cpp)
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"
-        "${CMAKE_CURRENT_LIST_DIR}/../main" "${CMAKE_CURRENT_LIST_DIR}/../main/core")
+        "${CMAKE_CURRENT_LIST_DIR}/../main" "${CMAKE_CURRENT_LIST_DIR}/../main/core"
+        "${CMAKE_CURRENT_LIST_DIR}/../main/app" "${CMAKE_CURRENT_LIST_DIR}/../main/drivers")
     target_link_libraries(${test_name} PRIVATE Threads::Threads)
     set_target_properties(${test_name} PROPERTIES
         CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
@@ -84,4 +85,16 @@ add_test(NAME imu_drivers COMMAND imu_driver_tests)
 add_test(NAME imu_core COMMAND imu_core_tests)
 add_test(NAME imu_module COMMAND imu_module_tests)
 add_test(NAME inputs_module COMMAND inputs_module_tests)
+add_test(NAME midi_module COMMAND midi_module_tests)
 add_test(NAME tilt COMMAND tilt_tests)
+
+add_executable(midi_mapping_tests midi_mapping_tests.cpp)
+target_include_directories(midi_mapping_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../main/app"
+    "${CMAKE_CURRENT_LIST_DIR}/../main/core")
+target_link_libraries(midi_mapping_tests PRIVATE box2d)
+set_target_properties(midi_mapping_tests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(midi_mapping_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME midi_mapping COMMAND midi_mapping_tests)

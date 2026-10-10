@@ -13,7 +13,7 @@
 
 #define LOG_TAG "ball"
 
-esp_err_t ball_create(ball_t* ball, float x, float y, b2WorldId world)
+esp_err_t ball_create(ball_t* ball, float x, float y, b2WorldId world, bool report_hits)
 {
     ESP_RETURN_ON_FALSE(ball != NULL, ESP_ERR_INVALID_ARG, LOG_TAG, "Ball is NULL");
 
@@ -21,7 +21,7 @@ esp_err_t ball_create(ball_t* ball, float x, float y, b2WorldId world)
     const int diameter = static_cast<int>(std::lround(2.0f * physics::BALL_RADIUS * LCD_H_RES));
     ESP_RETURN_ON_ERROR(ball->view.create(diameter), LOG_TAG, "Failed to create ball view");
 
-    const b2BodyId body = physics::create_ball(world, {x, y});
+    const b2BodyId body = physics::create_ball(world, {x, y}, report_hits);
     if (!b2Body_IsValid(body))
     {
         ball->view.destroy();

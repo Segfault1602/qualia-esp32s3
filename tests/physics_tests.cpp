@@ -1,21 +1,29 @@
 #include "physics_world.h"
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 
-#define CHECK(condition) do { if (!(condition)) { \
-    std::fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition); \
-    std::exit(EXIT_FAILURE); \
-} } while (false)
+#define CHECK(condition)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            std::fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition);                                       \
+            std::exit(EXIT_FAILURE);                                                                                   \
+        }                                                                                                              \
+    } while (false)
 
 int main()
 {
     const b2WorldId world = physics::create_world();
     CHECK(b2World_IsValid(world));
-    CHECK(b2Body_IsValid(physics::create_border(world)));
+    const b2BodyId border = physics::create_border(world);
+    CHECK(b2Body_IsValid(border));
     const b2Vec2 start{0.3f, 0.8f};
-    const b2BodyId ball = physics::create_ball(world, start);
+    const b2BodyId ball = physics::create_ball(world, start, true);
     CHECK(b2Body_IsValid(ball));
 
     constexpr float contact_distance = physics::BORDER_RADIUS - physics::BALL_RADIUS;
@@ -26,9 +34,37 @@ int main()
     bool left_of_center = start.x < physics::BORDER_CENTER.x;
     float first_window_swing = 0.0f;
     float last_window_swing = 0.0f;
+    int bounce_count = 0;
+    int resting_bounce_count = 0;
+    bool checked_events = false;
     for (int i = 0; i < 12 * steps_per_window; ++i)
     {
         physics::step(world);
+        const auto events = b2World_GetContactEvents(world);
+        const auto bounce = physics::strongest_bounce(events, ball, border);
+        if (bounce)
+        {
+            ++bounce_count;
+            CHECK(bounce->approach_speed > 0.2f);
+            CHECK(b2Distance(bounce->point, physics::BORDER_CENTER) > contact_distance - 0.01f);
+            if (i >= 11 * steps_per_window)
+            {
+                ++resting_bounce_count;
+            }
+            if (!checked_events)
+            {
+                std::array<b2ContactHitEvent, 2> duplicate{events.hitEvents[0], events.hitEvents[0]};
+                std::swap(duplicate[1].shapeIdA, duplicate[1].shapeIdB);
+                duplicate[1].approachSpeed = duplicate[0].approachSpeed + 1.0f;
+                b2ContactEvents synthetic{};
+                synthetic.hitEvents = duplicate.data();
+                synthetic.hitCount = 2;
+                const auto strongest = physics::strongest_bounce(synthetic, ball, border);
+                CHECK(strongest && strongest->approach_speed == duplicate[1].approachSpeed);
+                CHECK(!physics::strongest_bounce(synthetic, ball, ball));
+                checked_events = true;
+            }
+        }
         const b2Vec2 position = b2Body_GetPosition(ball);
         const float distance = b2Distance(position, physics::BORDER_CENTER);
         max_distance = std::fmax(max_distance, distance);
@@ -64,6 +100,9 @@ int main()
     // It rolls back and forth across the lowest point, losing energy over time.
     CHECK(center_crossings >= 4);
     CHECK(last_window_swing < 0.5f * first_window_swing);
+    CHECK(checked_events);
+    CHECK(bounce_count >= 2);
+    CHECK(resting_bounce_count == 0);
     // Rolling resistance and damping bring it to rest at the lowest point.
     const b2Vec2 rest = b2Body_GetPosition(ball);
     CHECK(b2Length(b2Body_GetLinearVelocity(ball)) < 0.003f);

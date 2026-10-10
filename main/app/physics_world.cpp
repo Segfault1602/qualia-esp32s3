@@ -18,13 +18,14 @@ constexpr float BALL_ROLLING_RESISTANCE = 0.02f;
 // Stands in for friction against the screen surface, which the 2D world does not model; without it the
 // ball coasts forever when the screen lies flat.
 constexpr float BALL_LINEAR_DAMPING = 0.3f;
-}
+} // namespace
 
 b2WorldId create_world()
 {
     b2WorldDef world_def = b2DefaultWorldDef();
     world_def.gravity = DEFAULT_GRAVITY;
     world_def.restitutionThreshold = RESTITUTION_THRESHOLD;
+    world_def.hitEventThreshold = RESTITUTION_THRESHOLD;
     return b2CreateWorld(&world_def);
 }
 
@@ -62,7 +63,7 @@ b2BodyId create_border(b2WorldId world)
     return border;
 }
 
-b2BodyId create_ball(b2WorldId world, b2Vec2 position)
+b2BodyId create_ball(b2WorldId world, b2Vec2 position, bool report_hits)
 {
     b2BodyDef body_def = b2DefaultBodyDef();
     body_def.type = b2_dynamicBody;
@@ -78,6 +79,7 @@ b2BodyId create_ball(b2WorldId world, b2Vec2 position)
 
     b2ShapeDef shape_def = b2DefaultShapeDef();
     shape_def.density = BALL_DENSITY;
+    shape_def.enableHitEvents = report_hits;
     shape_def.material.friction = BALL_FRICTION;
     shape_def.material.restitution = BALL_RESTITUTION;
     shape_def.material.rollingResistance = BALL_ROLLING_RESISTANCE;
@@ -95,4 +97,23 @@ void step(b2WorldId world)
 {
     b2World_Step(world, 1.0f / STEPS_PER_SECOND, SUB_STEPS);
 }
+
+std::optional<Bounce> strongest_bounce(const b2ContactEvents& events, b2BodyId ball, b2BodyId border)
+{
+    std::optional<Bounce> bounce;
+    for (int i = 0; i < events.hitCount; ++i)
+    {
+        const auto& hit = events.hitEvents[i];
+        const b2BodyId a = b2Shape_GetBody(hit.shapeIdA);
+        const b2BodyId b = b2Shape_GetBody(hit.shapeIdB);
+        const bool matches =
+            (B2_ID_EQUALS(a, ball) && B2_ID_EQUALS(b, border)) || (B2_ID_EQUALS(a, border) && B2_ID_EQUALS(b, ball));
+        if (matches && hit.approachSpeed > RESTITUTION_THRESHOLD &&
+            (!bounce || hit.approachSpeed > bounce->approach_speed))
+        {
+            bounce = Bounce{hit.point, hit.approachSpeed};
+        }
+    }
+    return bounce;
 }
+} // namespace physics

@@ -13,6 +13,11 @@
 #include "lcd_controller.h"
 #include "simulation.h"
 
+#if CONFIG_QUALIA_MODE_MIDI
+#include "bounce_midi.h"
+#include "midi_handoff.h"
+#endif
+
 namespace
 {
 constexpr const char* TAG = "tasks";
@@ -41,8 +46,10 @@ static_assert(pdMS_TO_TICKS(SENSORS_PERIOD.count()) > 0, "The sensors tick is sh
 app::BoardImu* g_sensors_imu = nullptr;
 app::BoardInputs* g_sensors_inputs = nullptr;
 const app::BoardImu* g_ui_imu = nullptr;
+BounceCallback g_on_bounce = nullptr;
 #if CONFIG_QUALIA_MODE_MIDI
 modules::Midi* g_midi = nullptr;
+app::MidiHandoff g_midi_handoff;
 #endif
 
 std::chrono::microseconds now()
@@ -87,7 +94,7 @@ void ui_task(void*)
     ESP_LOGI(TAG, "UI task started");
 
     ESP_ERROR_CHECK(gui::init());
-    ESP_ERROR_CHECK(init_simulation(*g_ui_imu));
+    ESP_ERROR_CHECK(init_simulation(*g_ui_imu, g_on_bounce));
 
     for (;;)
     {
@@ -100,10 +107,37 @@ void ui_task(void*)
 #if CONFIG_QUALIA_MODE_MIDI
 void midi_task(void*)
 {
+    std::optional<std::chrono::microseconds> bootloader_deadline;
     for (;;)
     {
         vTaskDelay(pdMS_TO_TICKS(modules::Midi::PERIOD.count()));
         g_midi->step(now());
+        ESP_ERROR_CHECK(g_midi_handoff.set_online(g_midi->ready_for_notes()));
+        if (g_midi->bootloader_requested())
+        {
+            if (!bootloader_deadline)
+            {
+                bootloader_deadline = now() + std::chrono::milliseconds(250);
+            }
+            if (g_midi->bootloader_ready() || now() >= *bootloader_deadline)
+            {
+                if (!g_midi->bootloader_ready())
+                {
+                    ESP_LOGW(TAG, "Bootloader entry timed out waiting for MIDI note cleanup");
+                }
+                ESP_ERROR_CHECK(drivers::MidiUsb::enter_bootloader());
+            }
+            continue;
+        }
+        if (g_midi->can_submit())
+        {
+            const auto note = g_midi_handoff.receive();
+            if (note)
+            {
+                ESP_ERROR_CHECK(g_midi->submit(*note));
+                g_midi->step(now());
+            }
+        }
     }
 }
 #endif
@@ -126,10 +160,11 @@ esp_err_t start_sensors_task(app::BoardImu& imu, app::BoardInputs& inputs)
     return start(SENSORS_TASK, sensors_task);
 }
 
-esp_err_t start_ui_task(const app::BoardImu& imu)
+esp_err_t start_ui_task(const app::BoardImu& imu, BounceCallback on_bounce)
 {
     ESP_RETURN_ON_FALSE(drivers::Lcd::is_initialized(), ESP_ERR_INVALID_STATE, TAG, "LCD is not initialized");
     g_ui_imu = &imu;
+    g_on_bounce = on_bounce;
     return start(UI_TASK, ui_task);
 }
 
@@ -137,8 +172,26 @@ esp_err_t start_ui_task(const app::BoardImu& imu)
 esp_err_t start_midi_task(modules::Midi& midi)
 {
     ESP_RETURN_ON_FALSE(midi.is_initialized(), ESP_ERR_INVALID_STATE, TAG, "MIDI is not initialized");
+    ESP_RETURN_ON_ERROR(g_midi_handoff.init(), TAG, "Failed to initialize MIDI handoff");
     g_midi = &midi;
     return start(MIDI_TASK, midi_task);
+}
+
+void publish_bounce_midi(const physics::Bounce& bounce)
+{
+    const auto note = bounce_note(bounce);
+    if (!note)
+    {
+        ESP_LOGE(TAG, "Cannot map invalid bounce to MIDI");
+        return;
+    }
+    static esp_err_t last_error = ESP_OK;
+    const esp_err_t err = g_midi_handoff.publish(*note);
+    if (err != ESP_OK && err != last_error)
+    {
+        ESP_LOGW(TAG, "Discarding MIDI bounce: %s", err == ESP_ERR_NO_MEM ? "queue full" : "USB MIDI offline");
+    }
+    last_error = err;
 }
 #endif
 } // namespace app

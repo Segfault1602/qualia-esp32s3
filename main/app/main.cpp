@@ -120,8 +120,10 @@ extern "C" void app_main(void)
     }
 
     check("sensors_task", "start", Policy::Required, app::start_sensors_task(g_imu, g_inputs));
-    check("ui_task", "start", Policy::Required, app::start_ui_task(g_imu));
 #if CONFIG_QUALIA_MODE_MIDI
     check("midi_task", "start", Policy::Required, app::start_midi_task(g_midi));
+    check("ui_task", "start", Policy::Required, app::start_ui_task(g_imu, app::publish_bounce_midi));
+#else
+    check("ui_task", "start", Policy::Required, app::start_ui_task(g_imu));
 #endif
 }

@@ -32,7 +32,7 @@ profile: defaults do not overwrite an existing generated `sdkconfig`.
 ## Optional profiles
 
 ```sh
-# USB MIDI receiver and packet logger (not a synthesizer)
+# USB MIDI bounce notes (external synth required)
 idf.py -B build/midi -D SDKCONFIG=build/midi/sdkconfig -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.defaults.midi" build
 
 # Simulation timing over native JTAG
@@ -50,8 +50,33 @@ Use the matching build directory and `SDKCONFIG` path when flashing.
 **MIDI and native JTAG cannot run together** because they share the USB PHY.
 MIDI takes over native USB; its console uses UART0 at 115200 baud and needs a
 separate serial adapter. Flash MIDI over native USB without `monitor`.
-To flash again, hold BOOT, press and release RESET, then release BOOT and select
-the ROM downloader's serial port.
+For the first MIDI flash or recovery, hold BOOT while pressing/releasing RESET,
+then release BOOT and select the downloader's serial port.
+
+### MIDI
+
+Route **TinyUSB Device MIDI 1** to an external synth, DAW, or VCV Rack.
+Bounces send 100 ms notes on channel 1. Pitch follows 15 equal wall sectors,
+ascending clockwise from C3 at the top to C5 in C major (MIDI 48-72).
+Velocity follows perpendicular impact speed; glancing hits are softer.
+
+To reflash without buttons, send this SysEx to the device's MIDI input:
+
+```text
+F0 7D 51 55 41 4C 49 41 01 F7
+```
+
+On Linux, use `amidi -l` to find the port, then:
+
+```sh
+amidi -p hw:CARD,DEVICE,SUBDEVICE -S 'F0 7D 51 55 41 4C 49 41 01 F7'
+```
+
+Wait for the downloader serial port, then flash the MIDI profile without `monitor`.
+Any connected MIDI sender can trigger this reboot; download-disabling eFuses
+prevent it.
+
+### Trace capture
 
 For trace capture, run Espressif's OpenOCD:
 
@@ -88,8 +113,7 @@ cmake --build build/host --parallel 4
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --test-dir build/host --output-on-failure
 ```
 
-The tests cover physics, display mapping, sensor drivers, gravity estimation,
-and button debouncing. With NumPy installed, run the trace analyzer tests:
+Trace analyzer tests require NumPy:
 
 ```sh
 python -m unittest discover -s tests -p test_trace.py
