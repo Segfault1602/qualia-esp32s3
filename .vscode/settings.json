@@ -1,5 +1,6 @@
 {
     "idf.adapterTargetName": "esp32s3",
+    "idf.buildPath": "${workspaceFolder}/build/demo",
     "files.associations": {
         "esp_compiler.h": "c",
         "pca9554_controller.h": "c",
@@ -37,7 +38,5 @@
         "lv_obj.h": "c"
     },
     "editor.formatOnSave": true,
-    "idf.flashType": "JTAG",
-    "idf.portWin": "COM7",
     "editor.defaultFormatter": "ms-vscode.cpptools"
 }

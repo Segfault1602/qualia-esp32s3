@@ -1,0 +1,28 @@
+menu "Qualia demo"
+
+    choice QUALIA_MODE
+        prompt "Operating mode"
+        default QUALIA_MODE_DEMO
+        help
+            USB MIDI and native JTAG tracing cannot share the ESP32-S3
+            internal USB PHY. Use a separate configuration for each mode.
+
+        config QUALIA_MODE_DEMO
+            bool "Display and buttons"
+
+        config QUALIA_MODE_MIDI
+            bool "Display, buttons, and USB MIDI"
+
+        config QUALIA_MODE_TRACE
+            bool "Display, buttons, and JTAG application tracing"
+    endchoice
+
+    config QUALIA_IMU_DEBUG
+        bool "Show raw IMU readings"
+        default n
+        help
+            Logs the LSM6DSOX and LIS3MDL readings, in the sensor frame, over
+            serial at 2 Hz and shows them on screen. Used to check the sensor
+            axes against the display.
+
+endmenu

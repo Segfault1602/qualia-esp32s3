@@ -1,0 +1,90 @@
+#include "pca9554_controller.h"
+
+#include <esp_check.h>
+#include <esp_io_expander_tca9554.h>
+
+#include "defines.h"
+#include "esp_i2c_register_bus.h"
+#include "i2c_bus.h"
+
+namespace
+{
+constexpr const char* TAG = "PCA9554";
+
+esp_io_expander_handle_t g_expander = nullptr;
+// Our own device at the expander's address, for registers the component does not cache (polarity, input port).
+// Its transfers use I2C_MASTER_TIMEOUT_MS rather than the component's 1000 ms.
+EspI2cRegisterBus g_registers;
+bool g_initialized = false;
+} // namespace
+
+namespace drivers
+{
+esp_err_t Pca9554::init()
+{
+    ESP_RETURN_ON_FALSE(!g_initialized, ESP_ERR_INVALID_STATE, TAG, "PCA9554 is already initialized");
+    ESP_RETURN_ON_FALSE(I2cBus::is_initialized(), ESP_ERR_INVALID_STATE, TAG, "I2C bus is not initialized");
+
+    ESP_RETURN_ON_ERROR(I2cBus::open(g_registers, PCA9554_ADDR), TAG, "Failed to add register device");
+    const std::uint8_t no_inversion = 0;
+    ESP_RETURN_ON_ERROR(static_cast<esp_err_t>(g_registers.write(PCA9554_INVERSION_PORT_REG, {&no_inversion, 1})), TAG,
+                        "Failed to clear input inversion");
+
+    esp_err_t ret = ESP_OK;
+    ESP_GOTO_ON_ERROR(esp_io_expander_new_i2c_tca9554(I2cBus::handle(), PCA9554_ADDR, &g_expander), err, TAG,
+                      "Failed to create IO expander");
+    ESP_GOTO_ON_ERROR(esp_io_expander_set_dir(g_expander, 0xFF, IO_EXPANDER_OUTPUT), err, TAG,
+                      "Failed to configure outputs");
+    ESP_GOTO_ON_ERROR(esp_io_expander_set_level(g_expander, 0xFF, 0), err, TAG, "Failed to clear outputs");
+    ESP_GOTO_ON_ERROR(esp_io_expander_set_dir(g_expander, BUTTON_UP | BUTTON_DOWN, IO_EXPANDER_INPUT), err, TAG,
+                      "Failed to configure button inputs");
+    ESP_GOTO_ON_ERROR(esp_io_expander_print_state(g_expander), err, TAG, "Failed to read expander state");
+
+    g_initialized = true;
+    return ESP_OK;
+err:
+    if (g_expander != nullptr)
+    {
+        ESP_ERROR_CHECK(esp_io_expander_del(g_expander));
+        g_expander = nullptr;
+    }
+    return ret;
+}
+
+bool Pca9554::is_initialized()
+{
+    return g_initialized;
+}
+
+esp_io_expander_handle_t Pca9554::handle()
+{
+    return g_expander;
+}
+
+esp_err_t Pca9554::set_direction(std::uint32_t pins, esp_io_expander_dir_t direction)
+{
+    ESP_RETURN_ON_ERROR(esp_io_expander_set_dir(g_expander, pins, direction), TAG, "Failed to set pin direction");
+    return ESP_OK;
+}
+
+esp_err_t Pca9554::set_level(std::uint32_t pins, bool high)
+{
+    ESP_RETURN_ON_ERROR(esp_io_expander_set_level(g_expander, pins, high ? 1 : 0), TAG, "Failed to set pin level");
+    return ESP_OK;
+}
+
+std::expected<bool, esp_err_t> Pca9554::get_level(std::uint32_t pin)
+{
+    if (!g_initialized)
+    {
+        return std::unexpected(ESP_ERR_INVALID_STATE);
+    }
+    std::uint8_t input_port = 0;
+    const esp_err_t err = static_cast<esp_err_t>(g_registers.read(PCA9554_INPUT_PORT_REG, {&input_port, 1}));
+    if (err != ESP_OK)
+    {
+        return std::unexpected(err);
+    }
+    return (input_port & pin) != 0;
+}
+} // namespace drivers
