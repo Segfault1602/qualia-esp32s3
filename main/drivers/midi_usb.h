@@ -7,12 +7,15 @@
 
 #include <esp_err.h>
 
+#include "midi_message.h"
+
 namespace drivers
 {
 /**
- * @brief USB MIDI device on the native USB port, through TinyUSB.
+ * @brief USB MIDI 2.0 device with MIDI 1.0 fallback on the native USB port, through TinyUSB.
  *
- * init() also starts TinyUSB's own device task.
+ * init() also starts TinyUSB's own device task. Alternate setting 0 carries USB MIDI 1.0
+ * event packets; alternate setting 1 carries UMP.
  */
 class MidiUsb
 {
@@ -20,7 +23,7 @@ class MidiUsb
     MidiUsb() = delete;
 
     /**
-     * @brief Install the TinyUSB driver with a single MIDI interface.
+     * @brief Install USB MIDI 2.0 with MIDI 1.0 fallback.
      */
     static esp_err_t init();
     static bool is_initialized();
@@ -28,19 +31,20 @@ class MidiUsb
     /**
      * @brief One 4-byte USB MIDI event packet.
      */
-    using Packet = std::array<std::uint8_t, 4>;
+    using Packet = midi::UsbPacket;
+
+    static midi::State state();
+    static std::expected<std::optional<midi::Message>, esp_err_t> read_message();
 
     /**
-     * @brief Next received packet, or nullopt when none is waiting (or before init()). Does not block.
+     * @brief Nonblocking complete-message submission in the supplied session.
+     *
+     * Repeat the identical message until success. NOT_FINISHED means pending;
+     * TIMEOUT means TX pressure; INVALID_STATE means the session is obsolete/offline.
      */
-    static std::optional<Packet> read_packet();
+    static std::expected<void, esp_err_t> write_message(const midi::Message& message, midi::State state);
 
     static bool connected();
-
-    /**
-     * @brief Submit a packet without waiting. INVALID_STATE means offline; TIMEOUT means a full TX buffer.
-     */
-    static std::expected<void, esp_err_t> write_packet(const Packet& packet);
 
     /**
      * @brief Disconnect USB and reset into the ESP32-S3 ROM downloader. Returns only on failure.

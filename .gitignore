@@ -1,5 +1,6 @@
 build/
 managed_components/
+.cache/clangd/
 __pycache__/
 sdkconfig
 sdkconfig.old

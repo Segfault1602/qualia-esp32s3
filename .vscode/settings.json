@@ -1,6 +1,14 @@
 {
     "idf.adapterTargetName": "esp32s3",
     "idf.buildPath": "${workspaceFolder}/build/demo",
+    "clangd.path": "${userHome}/.espressif/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin/clangd",
+    "clangd.arguments": [
+        "--background-index",
+        "--compile-commands-dir=${workspaceFolder}/build/demo",
+        "--query-driver=**/xtensa-esp-elf/**/xtensa-esp32s3-elf-*",
+        "--resource-dir=${userHome}/.espressif/tools/esp-clang/esp-21.1.3_20260408/esp-clang/lib/clang/21"
+    ],
+    "C_Cpp.intelliSenseEngine": "disabled",
     "files.associations": {
         "esp_compiler.h": "c",
         "pca9554_controller.h": "c",
@@ -39,6 +47,12 @@
     },
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-vscode.cpptools",
+    "[c]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
     "idf.currentSetup": "/home/alex/.espressif/v6.1/esp-idf",
     "idf.port": "/dev/ttyACM1"
 }

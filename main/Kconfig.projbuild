@@ -11,7 +11,7 @@ menu "Qualia demo"
             bool "Display and buttons"
 
         config QUALIA_MODE_MIDI
-            bool "Display, buttons, and USB MIDI"
+            bool "Display, buttons, and USB MIDI 2.0 with MIDI 1.0 fallback"
 
         config QUALIA_MODE_TRACE
             bool "Display, buttons, and JTAG application tracing"

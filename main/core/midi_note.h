@@ -12,8 +12,23 @@ namespace midi
 struct Note
 {
     std::uint8_t pitch;
-    std::uint8_t velocity;
+    double strength;
 };
+
+inline bool valid(Note note)
+{
+    return note.pitch <= 127 && std::isfinite(note.strength) && note.strength > 0.0 && note.strength <= 1.0;
+}
+
+inline std::uint8_t velocity7(Note note)
+{
+    return static_cast<std::uint8_t>(std::max(1L, std::lround(127.0 * note.strength)));
+}
+
+inline std::uint16_t velocity16(Note note)
+{
+    return static_cast<std::uint16_t>(std::max(1L, std::lround(65535.0 * note.strength)));
+}
 
 inline std::optional<Note> map_impact(float x, float y, float approach_speed, std::span<const std::uint8_t> scale,
                                       float full_velocity_speed)
@@ -36,7 +51,6 @@ inline std::optional<Note> map_impact(float x, float y, float approach_speed, st
         return std::nullopt;
     }
     const double fraction = std::min(static_cast<double>(approach_speed) / full_velocity_speed, 1.0);
-    const auto velocity = static_cast<std::uint8_t>(std::max(1L, std::lround(127.0 * fraction)));
-    return Note{scale[index], velocity};
+    return Note{scale[index], fraction};
 }
 } // namespace midi

@@ -129,10 +129,16 @@ void ui_task(void*)
 void midi_task(void*)
 {
     std::optional<std::chrono::microseconds> bootloader_deadline;
+    std::uint32_t generation = 0;
     for (;;)
     {
         vTaskDelay(pdMS_TO_TICKS(modules::Midi::PERIOD.count()));
         g_midi->step(now());
+        if (generation != g_midi->session_generation())
+        {
+            ESP_ERROR_CHECK(g_midi_handoff.set_online(false));
+            generation = g_midi->session_generation();
+        }
         ESP_ERROR_CHECK(g_midi_handoff.set_online(g_midi->ready_for_notes()));
         if (g_midi->bootloader_requested())
         {

@@ -100,6 +100,43 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME midi_mapping COMMAND midi_mapping_tests)
 
+add_executable(midi_ump_tests midi_ump_tests.cpp)
+target_include_directories(midi_ump_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../main/core")
+set_target_properties(midi_ump_tests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(midi_ump_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME midi_ump COMMAND midi_ump_tests)
+
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/Midi2.cmake")
+FetchContent_Declare(tinyusb_core
+    URL https://codeload.github.com/espressif/tinyusb/tar.gz/894ea01409e0407a7dbe0ee29b2d58a4691f9046
+    URL_HASH SHA256=9a7c17a931fbd3eeafc760bb8909f873e7d8f3358f236796d76b89566360a9f3
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR qualia-unused)
+FetchContent_MakeAvailable(tinyusb_core)
+add_library(midi2_host_stack STATIC
+    "${QUALIA_MIDI2_CLASS_SOURCE}"
+    "${tinyusb_core_SOURCE_DIR}/src/common/tusb_fifo.c"
+    "${tinyusb_core_SOURCE_DIR}/src/tusb.c")
+target_include_directories(midi2_host_stack PUBLIC "${CMAKE_CURRENT_LIST_DIR}/usb_shims")
+target_include_directories(midi2_host_stack SYSTEM PUBLIC "${tinyusb_core_SOURCE_DIR}/src"
+    "${tinyusb_midi2_SOURCE_DIR}/src/class/midi")
+set_target_properties(midi2_host_stack PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+
+add_executable(midi_usb_tests midi_usb_tests.cpp ../main/drivers/midi_usb.cpp)
+target_include_directories(midi_usb_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"
+    "${CMAKE_CURRENT_LIST_DIR}/../main" "${CMAKE_CURRENT_LIST_DIR}/../main/core"
+    "${CMAKE_CURRENT_LIST_DIR}/../main/drivers")
+target_link_libraries(midi_usb_tests PRIVATE midi2_host_stack Threads::Threads)
+set_target_properties(midi_usb_tests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(midi_usb_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+add_test(NAME midi_usb COMMAND midi_usb_tests)
+
 add_executable(gui_view_tests gui_view_tests.cpp ../main/gui/ball_view.cpp
     ../main/gui/border_view.cpp ../main/gui/imu_readout.cpp)
 target_include_directories(gui_view_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/host_shims"

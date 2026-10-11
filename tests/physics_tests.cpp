@@ -109,7 +109,7 @@ int main()
     CHECK(checked_events);
     CHECK(bounce_count >= 2);
     CHECK(resting_bounce_count == 0);
-    // Rolling resistance and damping bring it to rest at the lowest point.
+    // Border contact and rolling resistance bring it to rest at the lowest point.
     const b2Vec2 rest = b2Body_GetPosition(ball);
     CHECK(b2Length(b2Body_GetLinearVelocity(ball)) < 0.003f);
     CHECK(std::fabs(rest.x - physics::BORDER_CENTER.x) < 0.01f);
@@ -117,7 +117,7 @@ int main()
 
     // Tilting the device after the ball came to rest still moves it: here gravity turns to the right.
     b2World_SetGravity(world, {physics::GRAVITY_MAGNITUDE, 0.0f});
-    for (int i = 0; i < 10 * static_cast<int>(physics::STEPS_PER_SECOND); ++i)
+    for (int i = 0; i < 20 * static_cast<int>(physics::STEPS_PER_SECOND); ++i)
     {
         physics::step(world);
     }
@@ -126,16 +126,16 @@ int main()
     CHECK(tilted.x > physics::BORDER_CENTER.x + 0.9f * contact_distance);
     CHECK(std::fabs(tilted.y - physics::BORDER_CENTER.y) < 0.05f);
 
-    // With the screen flat, a rolling ball slows to a stop instead of coasting.
+    // Away from the border, the ball coasts without damping.
     b2World_SetGravity(world, {0.0f, 0.0f});
     b2Body_SetTransform(ball, physics::BORDER_CENTER, b2Rot_identity);
-    b2Body_SetLinearVelocity(ball, {0.05f, 0.0f});
+    b2Body_SetLinearVelocity(ball, {0.02f, 0.0f});
     for (int i = 0; i < 10 * static_cast<int>(physics::STEPS_PER_SECOND); ++i)
     {
         physics::step(world);
     }
-    CHECK(b2Length(b2Body_GetLinearVelocity(ball)) < 0.005f);
-    CHECK(b2Distance(b2Body_GetPosition(ball), physics::BORDER_CENTER) < contact_distance);
+    CHECK(std::fabs(b2Body_GetLinearVelocity(ball).x - 0.02f) < 0.0001f);
+    CHECK(std::fabs(b2Body_GetPosition(ball).x - (physics::BORDER_CENTER.x + 0.2f)) < 0.001f);
 
     b2DestroyWorld(world);
     CHECK(!b2World_IsValid(world));

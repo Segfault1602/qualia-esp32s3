@@ -186,13 +186,13 @@ void physics_tests()
     }
     CHECK(std::abs(canvas->x + 25 - 240) < 5);
     CHECK(canvas->y + 25 > 450);
-    for (int step = 3601; step <= 4200; ++step)
+    for (int step = 3601; step <= 4800; ++step)
     {
         CHECK(simulation.step(std::chrono::microseconds{(step * 1'000'000LL + 59) / 60}, imu::Vec3{G, 0, 0}) == ESP_OK);
     }
     CHECK(canvas->x + 25 > 430);
     CHECK(std::abs(canvas->y + 25 - 240) < 24);
-    for (int step = 4201; step <= 4260; ++step)
+    for (int step = 4801; step <= 4860; ++step)
     {
         CHECK(simulation.step(std::chrono::microseconds{(step * 1'000'000LL + 59) / 60}) == ESP_OK);
     }

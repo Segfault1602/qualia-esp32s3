@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "midi_message.h"
+
 namespace midi
 {
 class BootloaderCommand
@@ -18,8 +20,86 @@ class BootloaderCommand
         position_ = 0;
     }
 
+    bool feed_message(const Message& message, std::chrono::microseconds now)
+    {
+        if (!message.valid())
+        {
+            reset();
+            return false;
+        }
+        if (!message.ump)
+        {
+            return feed(message.packet(), now);
+        }
+        if (position_ != 0 && !ump_)
+        {
+            reset();
+        }
+        ump_ = true;
+        const auto type = message.words[0] >> 28;
+        const auto group = (message.words[0] >> 24) & 0xF;
+        if (group != 0)
+        {
+            return false;
+        }
+        if (type == 1 && ((message.words[0] >> 16) & 0xFF) >= 0xF8)
+        {
+            return false;
+        }
+        if (type != 3)
+        {
+            reset();
+            return false;
+        }
+        if (position_ != 0 && now - last_byte_ > std::chrono::seconds(1))
+        {
+            reset();
+        }
+        const auto status = (message.words[0] >> 20) & 0xF;
+        const auto count = (message.words[0] >> 16) & 0xF;
+        if (status > 3 || count > 6)
+        {
+            reset();
+            return false;
+        }
+        if (status <= 1)
+        {
+            position_ = 1;
+            last_byte_ = now;
+        }
+        else if (position_ == 0)
+        {
+            return false;
+        }
+        for (std::uint32_t i = 0; i < count; ++i)
+        {
+            const auto byte_index = i + 2;
+            const auto byte = (message.words[byte_index / 4] >> (24 - 8 * (byte_index % 4))) & 0xFF;
+            if (position_ >= MESSAGE.size() - 1 || byte != MESSAGE[position_])
+            {
+                reset();
+                return false;
+            }
+            ++position_;
+            last_byte_ = now;
+        }
+        const bool ending = status == 0 || status == 3;
+        if (ending)
+        {
+            const bool match = position_ == MESSAGE.size() - 1;
+            reset();
+            return match;
+        }
+        return false;
+    }
+
     bool feed(const std::array<std::uint8_t, 4>& packet, std::chrono::microseconds now)
     {
+        if (position_ != 0 && ump_)
+        {
+            reset();
+        }
+        ump_ = false;
         if (packet[0] >> 4 != 0)
         {
             return false;
@@ -76,5 +156,6 @@ class BootloaderCommand
   private:
     std::size_t position_ = 0;
     std::chrono::microseconds last_byte_{};
+    bool ump_ = false;
 };
 } // namespace midi

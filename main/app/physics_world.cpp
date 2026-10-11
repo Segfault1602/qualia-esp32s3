@@ -16,9 +16,6 @@ constexpr float BALL_RESTITUTION = 0.95f;
 // Box2D's default only bounces impacts above 1 unit/s, a screen width per second here, which flattens most bounces.
 constexpr float RESTITUTION_THRESHOLD = 0.2f;
 constexpr float BALL_ROLLING_RESISTANCE = 0.02f;
-// Stands in for friction against the screen surface, which the 2D world does not model; without it the
-// ball coasts forever when the screen lies flat.
-constexpr float BALL_LINEAR_DAMPING = 0.3f;
 } // namespace
 
 b2WorldId create_world()
@@ -69,7 +66,6 @@ b2BodyId create_ball(b2WorldId world, b2Vec2 position, bool report_hits)
     b2BodyDef body_def = b2DefaultBodyDef();
     body_def.type = b2_dynamicBody;
     body_def.position = position;
-    body_def.linearDamping = BALL_LINEAR_DAMPING;
     // Changing gravity does not wake a sleeping body, so the ball stays awake to follow the tilt.
     body_def.enableSleep = false;
     const b2BodyId ball = b2CreateBody(world, &body_def);

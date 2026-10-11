@@ -18,11 +18,11 @@
 namespace modules
 {
 template <typename T>
-concept MidiTransport = requires(const drivers::MidiUsb::Packet& packet) {
+concept MidiTransport = requires(const midi::Message& message, midi::State state) {
     { T::init() } -> std::same_as<esp_err_t>;
-    { T::connected() } -> std::same_as<bool>;
-    { T::read_packet() } -> std::same_as<std::optional<drivers::MidiUsb::Packet>>;
-    { T::write_packet(packet) } -> std::same_as<std::expected<void, esp_err_t>>;
+    { T::state() } -> std::same_as<midi::State>;
+    { T::read_message() } -> std::same_as<std::expected<std::optional<midi::Message>, esp_err_t>>;
+    { T::write_message(message, state) } -> std::same_as<std::expected<void, esp_err_t>>;
 };
 
 /**
@@ -52,6 +52,11 @@ class MidiController
         return initialized_;
     }
 
+    std::uint32_t session_generation() const
+    {
+        return state_.generation;
+    }
+
     bool ready_for_notes() const
     {
         return initialized_ && connected_ && !cleanup_ && !bootloader_requested_;
@@ -74,8 +79,7 @@ class MidiController
 
     esp_err_t submit(midi::Note note)
     {
-        ESP_RETURN_ON_FALSE(note.pitch <= 127 && note.velocity > 0 && note.velocity <= 127, ESP_ERR_INVALID_ARG, TAG,
-                            "Invalid MIDI note");
+        ESP_RETURN_ON_FALSE(midi::valid(note), ESP_ERR_INVALID_ARG, TAG, "Invalid MIDI note");
         ESP_RETURN_ON_FALSE(can_submit(), ESP_ERR_INVALID_STATE, TAG, "MIDI cannot accept a note");
         pending_ = note;
         return ESP_OK;
@@ -88,7 +92,16 @@ class MidiController
             ESP_LOGE(TAG, "Cannot step uninitialized MIDI");
             return;
         }
-        if (!Transport::connected())
+        const auto state = Transport::state();
+        if (state != state_)
+        {
+            abandon_operation();
+            pending_.reset();
+            bootloader_command_.reset();
+            cleanup_ = true;
+            state_ = state;
+        }
+        if (!state.connected)
         {
             if (connected_)
             {
@@ -108,19 +121,63 @@ class MidiController
         service_output(now);
         for (int i = 0; i < 16; ++i)
         {
-            const auto packet = Transport::read_packet();
-            if (!packet)
+            const auto received = Transport::read_message();
+            if (Transport::state() != state_)
+            {
+                bootloader_command_.reset();
+                break;
+            }
+            if (!received)
+            {
+                bootloader_command_.reset();
+                if (!read_error_reported_)
+                {
+                    ESP_LOGW(TAG, "MIDI input failed: %s; discarding partial command",
+                             esp_err_to_name(received.error()));
+                    read_error_reported_ = true;
+                }
+                break;
+            }
+            read_error_reported_ = false;
+            if (!*received)
             {
                 break;
             }
-            const auto& data = *packet;
+            const auto& message = **received;
             const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-            ESP_LOGI(TAG, "Read - Time (ms since boot): %lld, Data: %02hhX %02hhX %02hhX %02hhX", now_ms, data[0],
-                     data[1], data[2], data[3]);
-            if (!bootloader_requested_ && bootloader_command_.feed(data, now))
+            const bool log = now >= next_input_log_;
+            if (!log)
+            {
+                ++suppressed_logs_;
+            }
+            else
+            {
+                next_input_log_ = now + std::chrono::milliseconds(50);
+                if (suppressed_logs_ != 0)
+                {
+                    ESP_LOGI(TAG, "MIDI input log rate limited: %lu messages omitted",
+                             static_cast<unsigned long>(suppressed_logs_));
+                    suppressed_logs_ = 0;
+                }
+            }
+            if (log && message.ump)
+            {
+                ESP_LOGI(TAG, "Read UMP - Time (ms): %lld, Protocol: %s, Words: %u, %08lX %08lX %08lX %08lX", now_ms,
+                         state_.format == midi::Format::UmpMidi2 ? "2.0" : "1.0", static_cast<unsigned>(message.size),
+                         static_cast<unsigned long>(message.words[0]), static_cast<unsigned long>(message.words[1]),
+                         static_cast<unsigned long>(message.words[2]), static_cast<unsigned long>(message.words[3]));
+            }
+            else if (log)
+            {
+                const auto data = message.packet();
+                ESP_LOGI(TAG, "Read - Time (ms since boot): %lld, Data: %02hhX %02hhX %02hhX %02hhX", now_ms, data[0],
+                         data[1], data[2], data[3]);
+            }
+            if (!bootloader_requested_ && bootloader_command_.feed_message(message, now))
             {
                 ESP_LOGI(TAG, "Bootloader SysEx accepted");
                 bootloader_requested_ = true;
+                abandon_operation();
                 pending_.reset();
                 cleanup_ = true;
                 break;
@@ -135,11 +192,30 @@ class MidiController
         bool active = false;
     };
 
-    bool write(const drivers::MidiUsb::Packet& packet)
+    struct Operation
     {
-        const auto result = Transport::write_packet(packet);
+        midi::Note note;
+        bool on;
+    };
+
+    void abandon_operation()
+    {
+        if (operation_ && operation_->on)
+        {
+            active_[operation_->note.pitch].active = true;
+        }
+        operation_.reset();
+    }
+
+    bool write(const midi::Message& message)
+    {
+        const auto result = Transport::write_message(message, state_);
         if (!result)
         {
+            if (result.error() == ESP_ERR_NOT_FINISHED)
+            {
+                return false;
+            }
             if (!write_error_reported_)
             {
                 ESP_LOGW(TAG, "MIDI write failed: %s; retrying until recovery", esp_err_to_name(result.error()));
@@ -153,38 +229,44 @@ class MidiController
 
     void service_output(std::chrono::microseconds now)
     {
-        for (std::size_t pitch = 0; pitch < active_.size(); ++pitch)
+        for (std::size_t iteration = 0; iteration < active_.size() + 2; ++iteration)
         {
-            auto& note = active_[pitch];
-            if (note.active && (cleanup_ || now >= note.deadline))
+            if (!operation_)
             {
-                if (!write({0x08, 0x80, static_cast<std::uint8_t>(pitch), 0}))
+                for (std::size_t pitch = 0; pitch < active_.size(); ++pitch)
+                {
+                    if (active_[pitch].active && (cleanup_ || now >= active_[pitch].deadline))
+                    {
+                        operation_ = Operation{{static_cast<std::uint8_t>(pitch), 1.0}, false};
+                        break;
+                    }
+                }
+            }
+            if (!operation_)
+            {
+                cleanup_ = false;
+                if (!pending_)
                 {
                     return;
                 }
-                note.active = false;
+                operation_ = Operation{*pending_, !active_[pending_->pitch].active};
             }
-        }
-        cleanup_ = false;
-        if (!pending_)
-        {
-            return;
-        }
-        auto& active = active_[pending_->pitch];
-        if (active.active)
-        {
-            if (!write({0x08, 0x80, pending_->pitch, 0}))
+            if (!write(midi::note_message(operation_->note, operation_->on, state_.format)))
             {
                 return;
             }
-            active.active = false;
+            auto& active = active_[operation_->note.pitch];
+            if (operation_->on)
+            {
+                active = {now + NOTE_DURATION, true};
+                pending_.reset();
+            }
+            else
+            {
+                active.active = false;
+            }
+            operation_.reset();
         }
-        if (!write({0x09, 0x90, pending_->pitch, pending_->velocity}))
-        {
-            return;
-        }
-        active = {now + NOTE_DURATION, true};
-        pending_.reset();
     }
 
     static constexpr const char* TAG = "MIDI";
@@ -192,9 +274,14 @@ class MidiController
     bool connected_ = false;
     bool cleanup_ = false;
     bool write_error_reported_ = false;
+    bool read_error_reported_ = false;
     bool bootloader_requested_ = false;
+    std::chrono::microseconds next_input_log_{};
+    std::uint32_t suppressed_logs_ = 0;
     midi::BootloaderCommand bootloader_command_;
     std::optional<midi::Note> pending_;
+    std::optional<Operation> operation_;
+    midi::State state_{};
     std::array<ActiveNote, 128> active_{};
 };
 

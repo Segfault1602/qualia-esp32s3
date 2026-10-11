@@ -4,7 +4,7 @@ set(srcs app/main.cpp app/tasks.cpp app/simulation.cpp app/ball.cpp app/physics_
          drivers/esp_i2c_register_bus.cpp drivers/lsm6dsox.cpp drivers/lsm6dsox_device.cpp
          drivers/lis3mdl.cpp drivers/lis3mdl_device.cpp)
 if(CONFIG_QUALIA_MODE_MIDI)
-    list(APPEND srcs drivers/midi_usb.cpp)
+    list(APPEND srcs drivers/midi_usb.cpp drivers/midi_usb_bootloader.cpp)
 endif()
 if(CONFIG_QUALIA_IMU_DEBUG)
     list(APPEND srcs app/imu_overlay.cpp gui/imu_readout.cpp)
@@ -37,10 +37,10 @@ if(NOT CONFIG_LV_CONF_SKIP OR NOT CONFIG_LV_OS_NONE OR
     message(FATAL_ERROR "Use the SDK LVGL settings in sdkconfig.defaults (single-task software rendering, RGB565, ARGB8888, canvas, and rounded shapes).")
 endif()
 if(CONFIG_QUALIA_MODE_MIDI)
-    if(NOT CONFIG_TINYUSB_MIDI_COUNT EQUAL 1 OR CONFIG_ESP_TRACE_ENABLE OR
+    if(NOT CONFIG_TINYUSB_MIDI_COUNT EQUAL 0 OR CONFIG_ESP_TRACE_ENABLE OR
        CONFIG_ESP_TRACE_TRANSPORT_APPTRACE OR CONFIG_ESP_TRACE_TRANSPORT_USB_SERIAL_JTAG OR
        CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG OR CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG)
-        message(FATAL_ERROR "MIDI mode requires one MIDI interface, tracing disabled, and a non-USB-Serial/JTAG console. Use sdkconfig.defaults.midi.")
+        message(FATAL_ERROR "MIDI mode requires zero built-in MIDI interfaces, tracing disabled, and a non-USB-Serial/JTAG console. Use sdkconfig.defaults.midi.")
     endif()
 elseif(CONFIG_TINYUSB_MIDI_COUNT GREATER 0)
     message(FATAL_ERROR "MIDI interfaces must be disabled outside MIDI mode.")

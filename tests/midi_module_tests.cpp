@@ -32,6 +32,12 @@ struct FakeUsb
     static inline int reads = 0;
     static inline std::vector<Packet> sent;
     static inline std::deque<Packet> received;
+    static inline midi::State current_state{true, midi::Format::UsbMidi1, 1};
+    static inline std::vector<midi::Message> messages_sent;
+    static inline std::deque<midi::Message> messages_received;
+    static inline bool defer = false;
+    static inline bool read_failure = false;
+    static inline bool change_session_on_read = false;
 
     static void reset()
     {
@@ -42,6 +48,12 @@ struct FakeUsb
         reads = 0;
         sent.clear();
         received.clear();
+        current_state = {true, midi::Format::UsbMidi1, 1};
+        messages_sent.clear();
+        messages_received.clear();
+        defer = false;
+        read_failure = false;
+        change_session_on_read = false;
     }
     static esp_err_t init()
     {
@@ -50,6 +62,50 @@ struct FakeUsb
     static bool connected()
     {
         return online;
+    }
+    static midi::State state()
+    {
+        if (current_state.connected != online)
+        {
+            current_state.connected = online;
+            ++current_state.generation;
+        }
+        return current_state;
+    }
+    static std::expected<void, esp_err_t> write_message(const midi::Message& message, midi::State expected_state)
+    {
+        CHECK(expected_state == state());
+        if (defer)
+        {
+            return std::unexpected(ESP_ERR_NOT_FINISHED);
+        }
+        const auto result = write_packet(message.packet());
+        if (result)
+        {
+            messages_sent.push_back(message);
+        }
+        return result;
+    }
+    static std::expected<std::optional<midi::Message>, esp_err_t> read_message()
+    {
+        if (change_session_on_read)
+        {
+            ++current_state.generation;
+            change_session_on_read = false;
+        }
+        if (read_failure)
+        {
+            return std::unexpected(ESP_ERR_NO_MEM);
+        }
+        if (!messages_received.empty())
+        {
+            ++reads;
+            const auto message = messages_received.front();
+            messages_received.pop_front();
+            return message;
+        }
+        const auto packet = read_packet();
+        return packet ? std::optional{midi::Message::legacy(*packet)} : std::nullopt;
     }
     static std::expected<void, esp_err_t> write_packet(const Packet& packet)
     {
@@ -111,16 +167,16 @@ void note_tests()
         FakeUsb::fail_init = true;
         CHECK(midi.init() == ESP_FAIL);
         CHECK(!midi.is_initialized());
-        CHECK(midi.submit({60, 90}) == ESP_ERR_INVALID_STATE);
+        CHECK(midi.submit({60, 90.0 / 127.0}) == ESP_ERR_INVALID_STATE);
     }
     {
         Midi midi;
         init(midi);
-        CHECK(midi.submit({128, 80}) == ESP_ERR_INVALID_ARG);
-        CHECK(midi.submit({60, 0}) == ESP_ERR_INVALID_ARG);
-        CHECK(midi.submit({60, 128}) == ESP_ERR_INVALID_ARG);
-        CHECK(midi.submit({60, 64}) == ESP_OK);
-        CHECK(midi.submit({62, 64}) == ESP_ERR_INVALID_STATE);
+        CHECK(midi.submit({128, 80.0 / 127.0}) == ESP_ERR_INVALID_ARG);
+        CHECK(midi.submit({60, 0.0 / 127.0}) == ESP_ERR_INVALID_ARG);
+        CHECK(midi.submit({60, 128.0 / 127.0}) == ESP_ERR_INVALID_ARG);
+        CHECK(midi.submit({60, 64.0 / 127.0}) == ESP_OK);
+        CHECK(midi.submit({62, 64.0 / 127.0}) == ESP_ERR_INVALID_STATE);
         midi.step(0us);
         packet(0, {0x09, 0x90, 60, 64});
         midi.step(99ms);
@@ -134,7 +190,7 @@ void note_tests()
         Midi midi;
         init(midi);
         FakeUsb::write_budget = 0;
-        CHECK(midi.submit({48, 127}) == ESP_OK);
+        CHECK(midi.submit({48, 127.0 / 127.0}) == ESP_OK);
         midi.step(0us);
         CHECK(FakeUsb::sent.empty());
         CHECK(!midi.can_submit());
@@ -146,7 +202,7 @@ void note_tests()
         FakeUsb::write_budget = 0;
         midi.step(120ms);
         CHECK(FakeUsb::sent.size() == 1);
-        CHECK(midi.submit({72, 1}) == ESP_OK);
+        CHECK(midi.submit({72, 1.0 / 127.0}) == ESP_OK);
         midi.step(121ms);
         CHECK(FakeUsb::sent.size() == 1);
         FakeUsb::write_budget = -1;
@@ -157,11 +213,11 @@ void note_tests()
     {
         Midi midi;
         init(midi);
-        CHECK(midi.submit({60, 90}) == ESP_OK);
+        CHECK(midi.submit({60, 90.0 / 127.0}) == ESP_OK);
         midi.step(0us);
-        CHECK(midi.submit({62, 100}) == ESP_OK);
+        CHECK(midi.submit({62, 100.0 / 127.0}) == ESP_OK);
         midi.step(10ms);
-        CHECK(midi.submit({60, 110}) == ESP_OK);
+        CHECK(midi.submit({60, 110.0 / 127.0}) == ESP_OK);
         FakeUsb::write_budget = 0;
         midi.step(20ms);
         CHECK(FakeUsb::sent.size() == 2);
@@ -182,9 +238,9 @@ void note_tests()
     {
         Midi midi;
         init(midi);
-        CHECK(midi.submit({60, 100}) == ESP_OK);
+        CHECK(midi.submit({60, 100.0 / 127.0}) == ESP_OK);
         midi.step(0us);
-        CHECK(midi.submit({62, 100}) == ESP_OK);
+        CHECK(midi.submit({62, 100.0 / 127.0}) == ESP_OK);
         FakeUsb::online = false;
         midi.step(1ms);
         CHECK(!midi.can_submit());
@@ -199,7 +255,7 @@ void note_tests()
         CHECK(midi.can_submit());
         FakeUsb::flood = true;
         FakeUsb::reads = 0;
-        CHECK(midi.submit({72, 100}) == ESP_OK);
+        CHECK(midi.submit({72, 100.0 / 127.0}) == ESP_OK);
         midi.step(4ms);
         CHECK(FakeUsb::reads == 16);
         midi.step(104ms);
@@ -258,7 +314,7 @@ void sysex_tests()
     {
         Midi midi;
         init(midi);
-        CHECK(midi.submit({60, 90}) == ESP_OK);
+        CHECK(midi.submit({60, 90.0 / 127.0}) == ESP_OK);
         midi.step(0us);
         FakeUsb::received.assign(command_packets.begin(), command_packets.end());
         midi.step(1ms);
@@ -290,6 +346,67 @@ void sysex_tests()
     }
 }
 
+void ump_module_tests()
+{
+    Midi midi;
+    init(midi);
+    FakeUsb::current_state.format = midi::Format::UmpMidi2;
+    ++FakeUsb::current_state.generation;
+    midi.step(1ms);
+    CHECK(midi.submit({60, 0.5}) == ESP_OK);
+    FakeUsb::defer = true;
+    midi.step(2ms);
+    midi.step(200ms);
+    CHECK(FakeUsb::messages_sent.empty());
+    FakeUsb::defer = false;
+    midi.step(201ms);
+    CHECK(FakeUsb::messages_sent[0].words[0] == 0x40903C00);
+    CHECK(FakeUsb::messages_sent[0].words[1] == 0x80000000);
+    midi.step(300ms);
+    CHECK(FakeUsb::messages_sent.size() == 1);
+    midi.step(301ms);
+    CHECK(FakeUsb::messages_sent[1].words[0] == 0x40803C00);
+    CHECK(midi.submit({62, 0.5}) == ESP_OK);
+    midi.step(302ms);
+    CHECK(midi.submit({64, 0.5}) == ESP_OK);
+    FakeUsb::current_state.format = midi::Format::UmpMidi1;
+    ++FakeUsb::current_state.generation;
+    midi.step(303ms);
+    CHECK(FakeUsb::messages_sent.back().words[0] == 0x20803E00);
+    CHECK(midi.can_submit());
+    CHECK(midi.submit({65, 0.5}) == ESP_OK);
+    FakeUsb::defer = true;
+    midi.step(304ms);
+    FakeUsb::current_state.format = midi::Format::UsbMidi1;
+    ++FakeUsb::current_state.generation;
+    FakeUsb::defer = false;
+    midi.step(305ms);
+    CHECK((FakeUsb::sent.back() == Packet{8, 0x80, 65, 0}));
+    CHECK(midi.can_submit());
+    const midi::Message start{{0x30167D51, 0x55414C49}, 2, true};
+    const midi::Message end{{0x30324101, 0}, 2, true};
+    FakeUsb::messages_received.push_back(start);
+    midi.step(306ms);
+    FakeUsb::read_failure = true;
+    midi.step(307ms);
+    FakeUsb::read_failure = false;
+    FakeUsb::messages_received.push_back(end);
+    midi.step(308ms);
+    CHECK(!midi.bootloader_requested());
+    FakeUsb::messages_received.push_back(start);
+    midi.step(309ms);
+    FakeUsb::messages_received.push_back(end);
+    FakeUsb::change_session_on_read = true;
+    midi.step(310ms);
+    CHECK(!midi.bootloader_requested());
+    FakeUsb::messages_received.push_back(start);
+    FakeUsb::messages_received.push_back(end);
+    midi.step(311ms);
+    CHECK(midi.bootloader_requested());
+    midi.step(312ms);
+    CHECK(midi.bootloader_ready());
+}
+
 app::MidiHandoff* racing_handoff = nullptr;
 
 void reconnect_during_publish()
@@ -304,28 +421,28 @@ void handoff_tests()
     CHECK(handoff.set_online(true) == ESP_ERR_INVALID_STATE);
     CHECK(handoff.init() == ESP_OK);
     CHECK(handoff.init() == ESP_ERR_INVALID_STATE);
-    CHECK(handoff.publish({60, 80}) == ESP_ERR_INVALID_STATE);
+    CHECK(handoff.publish({60, 80.0 / 127.0}) == ESP_ERR_INVALID_STATE);
     CHECK(handoff.set_online(true) == ESP_OK);
     for (unsigned i = 0; i < app::MidiHandoff::CAPACITY; ++i)
     {
-        CHECK(handoff.publish({static_cast<std::uint8_t>(48 + i), 80}) == ESP_OK);
+        CHECK(handoff.publish({static_cast<std::uint8_t>(48 + i), 80.0 / 127.0}) == ESP_OK);
     }
-    CHECK(handoff.publish({60, 80}) == ESP_ERR_NO_MEM);
+    CHECK(handoff.publish({60, 80.0 / 127.0}) == ESP_ERR_NO_MEM);
     for (unsigned i = 0; i < app::MidiHandoff::CAPACITY; ++i)
     {
         const auto note = handoff.receive();
         CHECK(note && note->pitch == 48 + i);
     }
     CHECK(!handoff.receive());
-    CHECK(handoff.publish({60, 80}) == ESP_OK);
+    CHECK(handoff.publish({60, 80.0 / 127.0}) == ESP_OK);
     CHECK(handoff.set_online(false) == ESP_OK);
     CHECK(handoff.set_online(true) == ESP_OK);
     CHECK(!handoff.receive());
     racing_handoff = &handoff;
     host_queue_before_send = reconnect_during_publish;
-    CHECK(handoff.publish({60, 80}) == ESP_OK);
+    CHECK(handoff.publish({60, 80.0 / 127.0}) == ESP_OK);
     CHECK(!handoff.receive());
-    CHECK(handoff.publish({62, 80}) == ESP_OK);
+    CHECK(handoff.publish({62, 80.0 / 127.0}) == ESP_OK);
     CHECK(handoff.receive()->pitch == 62);
 }
 } // namespace
@@ -334,6 +451,7 @@ int main()
 {
     note_tests();
     sysex_tests();
+    ump_module_tests();
     handoff_tests();
     return EXIT_SUCCESS;
 }
